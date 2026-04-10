@@ -1,0 +1,68 @@
+
+SDKVER    = 5.0
+
+ARCH7 = -march=armv7 -mcpu=arm1176jzf-s -mcpu=cortex-a8
+ARCH6 = -march=armv6 -mcpu=arm1176jzf-s
+
+#ARCHNAME = arm-apple-darwin10-
+ARCHNAME = arm-apple-darwin10-llvm-
+
+IPHONE_TYPE = iPhoneOS
+
+DEVPATH = /SDK5.0/Platforms/$(IPHONE_TYPE).platform/Developer
+IPHONE_TYPE_SDK = $(DEVPATH)/SDKs/$(IPHONE_TYPE)$(SDKVER).sdk
+
+IPHONE_IP = 10.0.2.2
+
+RUN_PREFIX  = $(DEVPATH)/usr/bin
+
+CC      = $(RUN_PREFIX)/$(ARCHNAME)gcc-4.2
+CXX     = $(RUN_PREFIX)/$(ARCHNAME)g++-4.2
+LD      = $(CC)
+AR      = $(RUN_PREFIX)/ar
+
+RANLIB  = ranlib
+
+AR_FLAG = cru
+
+
+INCPATH += -I"$(IPHONE_TYPE_SDK)/usr/include"
+
+LDFLAGS=    -lobjc \
+            -bind_at_load \
+            -multiply_defined suppress \
+            -w
+			
+LDFLAGS += -framework CoreFoundation
+LDFLAGS += -framework Foundation
+LDFLAGS += -framework UIKit
+LDFLAGS += -F"$(IPHONE_TYPE_SDK)/System/Library/Frameworks"
+LDFLAGS += -F"$(IPHONE_TYPE_SDK)/System/Library/PrivateFrameworks"
+LDFLAGS += -O2
+
+CFLAGS +=	-Wall -g $(INCLUDE) -MD -D_VERSION='"$(VERSION)"'
+
+#CFLAGS +=	-O0
+#-m32
+CFLAGS +=	-O2 -Wno-unused-label
+
+CFLAGS  += $(INCPATH) \
+#	-std=c99 \
+	-W \
+	-funroll-loops \
+	-Diphoneos_version_min=2.0 \
+	-Wno-sign-compare
+
+CFLAGS += -F"$(IPHONE_TYPE_SDK)/System/Library/Frameworks"
+CFLAGS += -F"$(IPHONE_TYPE_SDK)/System/Library/PrivateFrameworks"
+
+CFLAGS += $(ARCH7)
+LDFLAGS += $(ARCH7)
+
+
+# uncomment depending on your operating system
+CFLAGS +=	-DIOS
+
+LIBS +=		\
+		-L../lib/ios -lpj-arm-apple-darwin9 -lpjlib-util-arm-apple-darwin9 -lpjnath-arm-apple-darwin9 -lssl -lcrypto \
+		-lpthread

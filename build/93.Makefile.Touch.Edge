@@ -1,0 +1,241 @@
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+#
+# 93.Makefile.Touch.Edge - Touch Edge Integration
+#
+# Copyright (C) 2026 ezlibs.com, All Rights Reserved.
+#
+# $Id: 93.Makefile.Touch.Edge 1 2026-03-15 Create $
+#
+# explain
+#      Touch Edge - integrates touch_edge as a component
+#
+# Update:
+#    2026-03-15 Create
+#
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+
+# platforms:
+PLATFORM = linux
+#PLATFORM = linux-x86-32
+#PLATFORM = linux-hi3515
+#PLATFORM = linux-arm
+#PLATFORM = linux-x86-64-centos5
+#PLATFORM = linux-am335x
+#PLATFORM = linux-mips-openwrt
+#PLATFORM = linux-mips-mipsl-openwrt
+#PLATFORM = linux-mipsel-openwrt-linux
+
+PROJECT_NAME=touchEdge
+
+DEF_VERSION =	0.1.0
+DIFF_VERSION =	0.1.0
+DEF_CONFIG_FILENAME_MAIN = cfg-$(PROJECT_NAME).cfg
+DEF_CONFIG_FILENAME_MAIN_DUPLICATE = cfg-$(PROJECT_NAME).cfg.duplicate
+DEF_LOG_FILENAME = log-$(PROJECT_NAME).log
+
+#include         Makefile.Defines.$(PLATFORM)
+include         Makefile.Defines/Makefile.Defines.$(PLATFORM)
+
+#CFLAGS =	-Wall -g -O2 -MD
+#CFLAGS += -D_DEBUG #debugme
+
+CFLAGS += -D_CONFIG_FILENAME_MAIN='"$(DEF_CONFIG_FILENAME_MAIN)"'
+CFLAGS += -D_CONFIG_FILENAME_MAIN_DUPLICATE='"$(DEF_CONFIG_FILENAME_MAIN_DUPLICATE)"'
+CFLAGS += -D_VERSION='"$(DEF_VERSION)"'
+CFLAGS += -D_LOG_FILENAME='"$(DEF_LOG_FILENAME)"'
+CFLAGS += -D_PROJECT_NAME='"$(PROJECT_NAME)"'
+
+##############################################################################
+# 源文件路径
+BASEDIR_SRC=../src
+
+##############################################################################
+#库文件路径
+#使用自带库
+#EZLIBS_BASEDIR_LIBS=./libs
+
+##使用发布库
+EZLIBS_BASEDIR_LIBS=$(HOME)/libs
+
+BASEDIR_SRC_GENERALAGENT=$(BASEDIR_SRC)/Maintain
+
+OBJS_GENERALAGENT = \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentLog.o \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentHandler.o\
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentTcpSocket.o \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgent.o
+
+##############################################################################
+## 配置模块
+#ezConfig
+CFLAGS += -D_USE_MODULES_EZCONFIG
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezConfig
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezConfig-$(PLATFORM)
+#json#thread
+OBJS_CONFIGS	= \
+		$(BASEDIR_SRC)/Configs/ConfigManager.o \
+		$(BASEDIR_SRC)/Configs/ConfigGeneral.o \
+		$(BASEDIR_SRC)/Configs/ConfigConsoleOverTcp.o
+
+#
+###############################################################################
+### 日志模块
+ifeq ($(PLATFORM),linux-mips-openwrt)
+	CFLAGS += -D_USE_EZLOG_FILENAME
+	CFLAGS += -D_EZLOG_Embed
+else ifeq ($(PLATFORM),linux-mips-mipsl-openwrt)
+	CFLAGS += -D_USE_EZLOG_FILENAME
+	CFLAGS += -D_EZLOG_Embed
+	CFLAGS += -D_Fun_iniRuntimeEnvironment_uci
+else
+	CFLAGS += -D_USE_EZLOG_FILENAME
+endif
+##############################################################################
+# 内置控制台模块
+#CFLAGS += -DFUNC_LOCAL_CONSOLE #本地调试接口
+
+##############################################################################
+#作为通用库
+CFLAGS += -I$(HOME)/libs/include/gmini
+LIBS   += -L$(HOME)/libs/lib -lgmini-$(PLATFORM)
+
+# 授权验证模块
+ifeq ($(PLATFORM),linux)
+	CFLAGS += -D_FUNC_gMiniLicense #gmini license
+	CFLAGS += -D_FUNC_gMiniLicenseDoNotStop #for device
+
+	OBJS_GENERALAGENT += \
+			$(BASEDIR_SRC)/Maintain/gMiniLicense.o
+else ifeq ($(PLATFORM),linux-mips-mipsl-openwrt)
+	CFLAGS += -D_FUNC_gMiniLicense
+	CFLAGS += -D_FUNC_gMiniLicenseDoNotStop #for device
+
+	OBJS_GENERALAGENT += \
+			$(BASEDIR_SRC)/Maintain/gMiniLicense.o
+else
+        #CFLAGS += -D_FUNC_gMiniLicense
+endif
+
+##############################################################################
+#新功能开关：如果编译不通过，删除该功能定义
+
+#CFLAGS += -D_FUNC_CONSOLE_OVERTCP #远程调试接口
+
+#######################################################################################################
+##客户端接入
+CFLAGS += -D_FUNC_TouchEdge
+
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/Stack/UniTransRestStack.o \
+#		$(BASEDIR_SRC)/Function/Stack/pq/PqStack.o
+
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/DBAgent/CacheKeyValue.o
+
+# Touch Edge 相关
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Function/Touch/Edge/DevWsRegisterCli.o \
+		$(BASEDIR_SRC)/Function/Touch/Edge/FunRegisterCli.o \
+		$(BASEDIR_SRC)/Function/Touch/Edge/AgentTouchEdge.o \
+		$(BASEDIR_SRC)/Configs/ConfigTouchEdge.o
+
+##############################################################################
+# 同平台有关的函数接口
+CFLAGS += -I${EZLIBS_BASEDIR_LIBS}/include/ezutil_platform
+LIBS += -L${EZLIBS_BASEDIR_LIBS}/lib -lezutil_platform-$(PLATFORM) -lrt
+#ezUtilCPP
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezUtilCPP/
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezUtilCPP-$(PLATFORM)
+
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezsocket
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -lezsocket-$(PLATFORM)
+
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ppSockets
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lppSockets-$(PLATFORM)
+#use ezutil library for http_parse
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezutil
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -lezutil-$(PLATFORM)
+LIBS += -lm
+
+## json
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/json
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -ljson-$(PLATFORM)
+#zlib
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/zlib
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -lz-$(PLATFORM)
+
+#
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezThread
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezThread-$(PLATFORM)
+LIBS += -lpthread -ldl
+
+# 协议
+CFLAGS += -I${EZLIBS_BASEDIR_LIBS}/include/come1
+LIBS += -L${EZLIBS_BASEDIR_LIBS}/lib -lcome1-$(PLATFORM)
+
+#main 调用，不用 ezthread
+OBJS_MAINTHREAD_P = $(BASEDIR_SRC)/main.o
+OBJS_MAINTHREAD_P += $(OBJS_GENERALAGENT)
+OBJS_MAINTHREAD_P += $(OBJS_CONFIGS)
+DIST_MAINTHREAD = generalAgentMain-HttpConn-$(PLATFORM)
+
+#多线程，用 ezthread
+OBJS_MULTITHREAD_P = \
+		$(BASEDIR_SRC)/Solar.o \
+		$(BASEDIR_SRC)/Console/LocalConsole.o \
+		$(BASEDIR_SRC)/Console/FunConsole.o \
+		$(BASEDIR_SRC)/Main.o
+OBJS_MULTITHREAD_P += $(OBJS_GENERALAGENT)
+OBJS_MULTITHREAD_P += $(OBJS_CONFIGS)
+DIST_MULTITHREAD = $(PROJECT_NAME)-$(PLATFORM)
+
+DIST =	$(DIST_MULTITHREAD)
+#DIST +=	$(DIST_MAINTHREAD)
+
+all: $(DIST)
+	@mkdir -p ../bin
+	#@mv $(DIST) ../bin
+	#@echo "Done, to ../bin for the object."
+
+$(DIST_MAINTHREAD):$(OBJS_MAINTHREAD_P)
+		$(CPP) -o $@ $^ $(LIBS)
+
+$(DIST_MULTITHREAD):$(OBJS_MULTITHREAD_P)
+		$(CPP) -o $@ $^ $(LIBS)
+
+-include *.d
+
+.c.o:
+	$(CC) -c $(CFLAGS) $< -o $@
+
+.cpp.o:
+	$(CPP) -c $(CFLAGS) $< -o $@
+
+clean:
+	rm -f $(DIST)
+	rm -f $(OBJS_MAINTHREAD_P) $(OBJS_MULTITHREAD_P) $(DIST)
+
+rebuild: clean all
+
+dirclean:clean
+	rm -f ./cfg*.bk
+	rm -rf logs/
+
+prepare:all
+	#rm -rf ./spages
+	#cp -rf ../scripts/spages/geminilock .; mv geminilock spages
+	#cp -f ../scripts/spages/umconfig.txt .
+	#cp $(DIST) .
+
+dbg:prepare
+	#scp -P50006 $(DIST) root@9e05c825f2e.ezlibs.com:/tmp/
+	scp $(DIST) root@192.168.9.76:/opt/touch
+
+sim:prepare
+	./$(DIST)
+
+#release all
+rel:prepare
+	rm -f $(DIST).tgz
+	tar -czvf $(DIST).tgz $(DIST)

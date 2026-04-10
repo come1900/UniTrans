@@ -1,0 +1,460 @@
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+#
+# 09.Makefile.LiveStreamming - Z:\svn\daily\src\appmodule\UniTrans\build\
+#
+# Copyright (C) 2016 ezlibs.com, All Rights Reserved.
+#
+# $Id: 09.Makefile.LiveStreamming 1 2016-09-23 05:11:30 WuJunjie Exp $
+#
+# explain
+#      exp
+#
+# Update:
+#    2021-02-23 11:26 1.5.6 短时间内不容许停止转码录像等
+#    2020-12-31 17:09 1.5.5 子进程处理
+#    2020-12-24 10:01 1.5.4 appkey 优化
+#    2020-07-09 08:38 1.5.2 tykd默认立即返回播放地址
+#    2020-06-03 10:50 1.5.1 Support Flv/Dash
+#    2020-05-26 10:55 1.5.0， 添加是否立即返回地址的配置：QuicklyPlayUrl， 性能优化
+#    2020-04-08 09:47 优化hello消息，1.4.4
+#    2020-04-03 10:35 使用PID控制程序单例运行，1.4.3
+#    2020-02-27 16:24 使用curl精简接口uniFace， 避免onvif等冲突，1.4.2
+#                     with : libcurl/build-linux-mini.sh
+#    2019-08-26 17:33 添加rtmp快速停止机制， 单独配置, 1.4.0
+#    2016-09-23 05:11 WuJunjie Create
+#
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+#
+# platforms:
+PLATFORM = linux
+#PLATFORM = linux-x86-32
+#PLATFORM = linux-hi3515
+#PLATFORM = linux-arm
+#PLATFORM = linux-x86-64
+#PLATFORM = linux-x86-64-centos5
+#PLATFORM = linux-am335x
+#android
+#PLATFORM = linux-arm-none-gnueabi
+#PLATFORM = linux-mips-openwrt
+#PLATFORM = macosx
+
+PROJECT_NAME=liveStreamming-uniTrans
+
+DEF_VERSION =	1.5.6
+DIFF_VERSION =	1.5.5
+DEF_CONFIG_FILENAME_MAIN = cfg-$(PROJECT_NAME).cfg
+DEF_CONFIG_FILENAME_MAIN_DUPLICATE = cfg-$(PROJECT_NAME).cfg.duplicate
+DEF_LOG_FILENAME = log-$(PROJECT_NAME).log
+
+#include         Makefile.Defines.$(PLATFORM)
+include         Makefile.Defines/Makefile.Defines.$(PLATFORM)
+
+#CFLAGS =	-Wall -g -O2 -MD
+#CFLAGS += -D_DEBUG #debugme
+
+CFLAGS += -D_CONFIG_FILENAME_MAIN='"$(DEF_CONFIG_FILENAME_MAIN)"'
+CFLAGS += -D_CONFIG_FILENAME_MAIN_DUPLICATE='"$(DEF_CONFIG_FILENAME_MAIN_DUPLICATE)"'
+CFLAGS += -D_VERSION='"$(DEF_VERSION)"'
+CFLAGS += -D_LOG_FILENAME='"$(DEF_LOG_FILENAME)"'
+CFLAGS += -D_PROJECT_NAME='"$(PROJECT_NAME)"'
+CFLAGS += -D_VENDOR=\"ezlibs.com\"
+CFLAGS += -g
+
+##############################################################################
+# 代码文件位置
+BASEDIR_SRC=../src
+
+##############################################################################
+#库文件位置
+#使用自带库, 目前自带 android 和 x86-32的库
+#EZLIBS_BASEDIR_LIBS=../libs
+
+##使用发布库
+EZLIBS_BASEDIR_LIBS=$(HOME)/libs
+
+BASEDIR_SRC_GENERALAGENT=$(BASEDIR_SRC)/Maintain
+
+OBJS_GENERALAGENT = \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentLog.o \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentHandler.o\
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentTcpSocket.o \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgent.o
+
+##############################################################################
+# 配置模块
+# Use ezConfig
+CFLAGS += -D_USE_MODULES_EZCONFIG
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezConfig
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezConfig-$(PLATFORM)
+#json#thread
+OBJS_CONFIGS	= \
+		$(BASEDIR_SRC)/Configs/ConfigManager.o \
+		$(BASEDIR_SRC)/Configs/ConfigGeneral.o \
+		$(BASEDIR_SRC)/Configs/ConfigConsoleOverTcp.o
+		#$(BASEDIR_SRC)/Configs/ConfigPandoraMatrix.o
+
+###############################################################################
+### 日志模块
+ifeq ($(PLATFORM),linux-mips-openwrt)
+	CFLAGS += -D_USE_EZLOG_CLASSIC
+else ifeq ($(PLATFORM),linux-hi3515)
+	CFLAGS += -D_USE_EZLOG_CLASSIC
+else
+	#CFLAGS += -D_USE_LOG4CPP
+	#CFLAGS+=-I$(EZLIBS_BASEDIR_LIBS)/log4cplus-$(PLATFORM)/include
+	#LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/log4cplus-$(PLATFORM)/lib -llog4cplus -lrt
+
+	#同log4cpp互斥
+	#CFLAGS += -D_USE_EZLOG_CLASSIC
+	CFLAGS += -D_USE_EZLOG_FILENAME
+endif
+
+##############################################################################
+## 串行调试模块
+CFLAGS += -DFUNC_LOCAL_CONSOLE #串口调试接口
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Console/LocalConsole.o
+
+##############################################################################
+# 授权管理模块
+CFLAGS += -D_FUNC_gMiniLicense #gmini license
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/gmini
+LIBS   += -L$(EZLIBS_BASEDIR_LIBS)/lib -lgmini-$(PLATFORM)
+
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Maintain/gMiniLicense.o
+
+##############################################################################
+## 数据模块
+#use sqlite
+#sqlite
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/sqlite++
+LIBS   += -L$(EZLIBS_BASEDIR_LIBS)/lib -lsqlite++-$(PLATFORM)
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/sqlite
+LIBS   += -L$(EZLIBS_BASEDIR_LIBS)/lib -lsqlite-$(PLATFORM)
+
+DEF_LocalDataBase_FILENAME = db-$(PROJECT_NAME).s3
+CFLAGS += -D_CONFIG_LocalDataBase='"$(DEF_LocalDataBase_FILENAME)"'
+
+CFLAGS += -D_USE_MODULES_LocalDataBase
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/DBAgent/DbLiveStreamming.o
+#
+CFLAGS += -D_USE_PID
+
+##############################################################################
+#以下功能可以随意组合， 但是至少保留一个功能，否则无意义
+#不需要的文件可以删除
+
+CFLAGS += -D_FUNC_CONSOLE_OVERTCP #远程调试接口
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralConsoleOverTcp.o
+
+#CFLAGS += -DEXAMPLE_SOCKET_STATUS_AGENT #tcp状态服务器
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/SocketStatusAgent.o
+
+#CFLAGS += -DEXAMPLE_GENERALAGENTHTTPKEEPCONNECTOR #http协议的客户端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentHttpKeepConnector.o
+
+#CFLAGS += -DEXAMPLE_DATAPARSE_EXAMPLE #数据解析示例
+#
+#CFLAGS += -DEXAMPLE_GENERALAGENTTCPSOCKETSERVER #TCP服务端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentTcpSocketServer.o
+
+#CFLAGS += -DEXAMPLE_GENERALAGENTTCPSOCKETCONNECTOR #tcp客户端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentTcpSocketConnector.o
+
+#CFLAGS += -DEXAMPLE_GENERALAGENTUDPSOCKETSERVER #UDP服务端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentUdpSocket.o
+#
+#CFLAGS += -DEXAMPLE_GENERALSOCKETPROCESSOR #使用单独的处理线程
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralSocketProcessor.o	\
+#		$(BASEDIR_SRC_GENERALAGENT)/SocketMsgQue.o
+#
+#CFLAGS += -DEXAMPLE_GENERALAGENTHTTPSERVER #HTTP服务端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentHttpServer.o
+#
+#CFLAGS += -DEXAMPLE_SIGNAL_ONDATA #使用数据回调机制
+
+#######################################################################################################
+##WebService服务器
+#CFLAGS += -DEXAMPLE_THE_WEBSERVICE
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/WebService/Session.o \
+#		$(BASEDIR_SRC)/WebService/WebServiceStack.o \
+#		$(BASEDIR_SRC)/WebService/HandlerWebService.o \
+#		$(BASEDIR_SRC)/WebService/HttpServerWebService.o \
+#		$(BASEDIR_SRC)/WebService/AgentWebService.o 
+
+#######################################################################################################
+##PubService服务器
+#CFLAGS += -DUSE_PUBSERVICE
+#
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/PubService/HandlerPubService.o \
+#		$(BASEDIR_SRC)/Function/PubService/HttpServerPubService.o \
+#		$(BASEDIR_SRC)/Function/PubService/AgentPubService.o
+
+#######################################################################################################
+##PandoraMatrix服务器
+#CFLAGS += -D_FUNC_PandoraMatrix
+
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Function/Stack/UniTransRestStack.o \
+		$(BASEDIR_SRC)/Function/Stack/pss/PssStack.o
+#		$(BASEDIR_SRC)/Function/Stack/SmsStack.o
+
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Function/Pandora/MsgContainer.o \
+		$(BASEDIR_SRC)/Function/Pandora/StreamContainer.o \
+		$(BASEDIR_SRC)/Function/Pandora/StreamUtility.o
+#		$(BASEDIR_SRC)/Function/Pandora/Matrix/HandlerPandoraMatrix.o \
+#		$(BASEDIR_SRC)/Function/Pandora/Matrix/HttpServerPandoraMatrix.o \
+#		$(BASEDIR_SRC)/Function/Pandora/Matrix/AgentPandoraMatrix.o
+		
+CFLAGS += -D_FUNC_LiveStatusServer
+OBJS_CONFIGS    += \
+		$(BASEDIR_SRC)/Configs/ConfigLiveStatusServer.o
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Function/LiveStatusServer/FileTailer.o \
+		$(BASEDIR_SRC)/Function/LiveStatusServer/HandlerLiveStatusServer.o \
+		$(BASEDIR_SRC)/Function/LiveStatusServer/HttpServerLiveStatusServer.o \
+		$(BASEDIR_SRC)/Function/LiveStatusServer/AgentLiveStatusServer.o
+
+CFLAGS += -D_FUNC_LiveStreamming
+CFLAGS += -D_FUNC_LiveStreammingServer
+#节点配置
+CFLAGS += -D_FUNC_PullTykdMobileService
+CFLAGS += -D_SUPPORT_CFG_TYKDWSURL #支持天翼看店ws地址配置
+#CFLAGS += -D_SUPPORT_CFG_PSSIXMAN #pssixman 地址配置
+OBJS_CONFIGS	+= \
+		$(BASEDIR_SRC)/Configs/ConfigPullTykdMobileService.o
+
+OBJS_CONFIGS	+= \
+		$(BASEDIR_SRC)/Configs/ConfigLiveStreammingServer.o
+
+OBJS_CONFIGS    += \
+		$(BASEDIR_SRC)/Configs/ConfigStreamPusher.o
+##############################################################################
+#拉流模块
+#基类
+CFLAGS += -D_FUNC_StreamPusher
+OBJS_GENERALAGENT += \
+                $(BASEDIR_SRC)/Function/StreamPusher/Pusher.o
+#hls and rtmp
+CFLAGS += -D_FUNC_LiveStreammingTykd2Hls
+OBJS_GENERALAGENT += \
+                $(BASEDIR_SRC)/Function/StreamPusher/PusherTykd2Rtmp.o
+#rtsp
+CFLAGS += -D_FUNC_LiveStreammingTykd2Rtsp
+OBJS_GENERALAGENT += \
+                $(BASEDIR_SRC)/Function/StreamPusher/PusherTykd2Rtsp.o
+#Stream2Hls
+CFLAGS += -D_FUNC_LiveStreammingStream2Hls
+OBJS_GENERALAGENT += \
+                $(BASEDIR_SRC)/Function/StreamPusher/PusherStream2Hls.o
+#主控
+OBJS_GENERALAGENT += \
+                $(BASEDIR_SRC)/Function/StreamPusher/StreamPusherTykd.o
+
+CFLAGS += -D_FUNC_HlsCONTENTS_PreHlsIndex
+##############################################################################
+CFLAGS += -D_USE_DB_FILE
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/sqlite++
+LIBS   += -L$(EZLIBS_BASEDIR_LIBS)/lib -lsqlite++-$(PLATFORM)
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/sqlite
+LIBS   += -L$(EZLIBS_BASEDIR_LIBS)/lib -lsqlite-$(PLATFORM)
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/DBAgent/DbKeyValue.o \
+		$(BASEDIR_SRC)/DBAgent/CacheKeyValue.o
+
+CFLAGS += -D_FUNC_OAuth20_GRestful
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Function/Interface/HandlerGRestHttpdSocket.o \
+		$(BASEDIR_SRC)/Function/LiveStreammingServer/HandlerLiveStreammingServer.o \
+		$(BASEDIR_SRC)/Function/Interface/GRestHttpdSocket.o \
+		$(BASEDIR_SRC)/Function/LiveStreammingServer/HttpServerLiveStreammingServer.o \
+		$(BASEDIR_SRC)/Function/LiveStreammingServer/AgentLiveStreammingServer.o
+
+##############################################################################
+# 天翼看店接口模块
+# 用uniFace替代 2020-02-27 16:31:51
+#CFLAGS += -D_SUPPORT_TYKD#支持天翼看店视频的分发
+#CFLAGS += -DWITH_NONAMESPACES
+#CFLAGS += -I$(HOME)/libs/gsoap-$(PLATFORM)/include/
+#LIBS +=	-L$(HOME)/libs/gsoap-$(PLATFORM)/lib/ -lgsoap
+
+#CFLAGS += -D_FUNC_DO_RELAY
+##CFLAGS += -D_FUNC_OVERLAY_LOGO
+#
+##如下任选且只能选其中一个， 用来区分默认SERVER_URL_RTMP等
+##CFLAGS += -D_SOAP_SVR_RELEASE_176#发布环境
+#CFLAGS += -D_SOAP_SVR_RELEASE#发布环境
+##CFLAGS += -D_SOAP_SVR_ALPHA_25#测试环境， 25
+##CFLAGS += -D_SOAP_SVR_SUZHOUSIFA_23#苏州司法项目
+#
+##使用PssServerPlayUrlHXReq接口
+#CFLAGS += -D_USE_PssServerPlayUrlHXReq
+## PssServerPlayUrlHXReq 接口2(2016-12-28)， 服务器用ip控制
+## 平台更新后打开，需要先更新接口
+#CFLAGS += -D_FUN_PssServerPlayUrlHXReq_NoLogin
+## 接口带认证参数
+#CFLAGS += -D_FUNC_PssServerPlayUrlHXReq_WithAuthPara
+
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/Interface/tykdWebService/soapC.o \
+#		$(BASEDIR_SRC)/Function/Interface/tykdWebService/soapMobileServiceSoapBindingProxy.o \
+#		$(BASEDIR_SRC)/Function/Interface/tykdWebService/stdsoap2.o \
+#		$(BASEDIR_SRC)/Function/Interface/tykdWebService/tykdMobileServiceClient.o
+
+#CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/dtPst1Cif/
+#LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -ldtPst1Cif-$(PLATFORM)
+CFLAGS += -I$(HOME)/libs/include/uniFace
+LIBS   += -L$(HOME)/libs/lib -luniFace-$(PLATFORM)
+CFLAGS += -I$(HOME)/libs/curl-$(PLATFORM)/include/
+LIBS   += -L$(HOME)/libs/curl-$(PLATFORM)/lib -lcurl
+
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/dtPst
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -ldtPst-$(PLATFORM)
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/Interface/tykdWebService/tykdMobileServiceClient.o
+		
+##############################################################################
+# ezUtilCPP
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezUtilCPP/
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -lezUtilCPP-$(PLATFORM)
+#
+# 纯算法工具接口
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezsocket
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezsocket-$(PLATFORM)
+# 纯算法工具接口
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezutil
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezutil-$(PLATFORM)
+# 同平台有关的工具类接口
+CFLAGS += -I${EZLIBS_BASEDIR_LIBS}/include/ezutil_platform
+LIBS += -L${EZLIBS_BASEDIR_LIBS}/lib -lezutil_platform-$(PLATFORM) -lrt
+
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ppSockets
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lppSockets-$(PLATFORM)
+
+## json
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/json
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -ljson-$(PLATFORM)
+#tinyxml2
+CFLAGS += -I$(HOME)/libs/include
+LIBS   += -L$(HOME)/libs/lib -ltinyxml2-$(PLATFORM)
+#sqlite
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/sqlite++
+LIBS   += -L$(EZLIBS_BASEDIR_LIBS)/lib -lsqlite++-$(PLATFORM)
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/sqlite
+LIBS   += -L$(EZLIBS_BASEDIR_LIBS)/lib -lsqlite-$(PLATFORM)
+#
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezThread
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezThread-$(PLATFORM)
+LIBS +=	-lpthread -ldl
+##zlib
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/zlib
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -lz-$(PLATFORM)
+
+#libsigc, do not use it now, use mysignal instead
+#CFLAGS+=-I$(EZLIBS_BASEDIR_LIBS)/libsigc++-$(PLATFORM)/lib/sigc++-2.0/include
+#CFLAGS+=-I$(EZLIBS_BASEDIR_LIBS)/libsigc++-$(PLATFORM)/include/sigc++-2.0
+#LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/libsigc++-$(PLATFORM)/lib/ -lsigc-2.0
+
+#No need, 2018-01-22 17:34:53
+#ifeq ($(PLATFORM),macosx)
+#
+#else
+#	CFLAGS += -DHAVE_LIBUUID
+#	CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include
+#	LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -luuid-$(PLATFORM)
+#endif
+
+#利用main调用，不用ezthread库
+OBJS_MAINTHREAD_P = $(BASEDIR_SRC)/main.o
+OBJS_MAINTHREAD_P += $(OBJS_GENERALAGENT)
+OBJS_MAINTHREAD_P += $(OBJS_CONFIGS)
+DIST_MAINTHREAD = $(PROJECT_NAME)MainThread-$(PLATFORM)
+
+#多线程，用ezthread库
+OBJS_MULTITHREAD_P = \
+		$(BASEDIR_SRC)/Solar.o \
+		$(BASEDIR_SRC)/Console/FunConsole.o \
+		$(BASEDIR_SRC)/Main.o
+OBJS_MULTITHREAD_P += $(OBJS_GENERALAGENT)
+OBJS_MULTITHREAD_P += $(OBJS_CONFIGS)
+DIST_MULTITHREAD = $(PROJECT_NAME)-$(PLATFORM)
+
+DIST =	$(DIST_MULTITHREAD)
+#服务器不要使用这种方式
+#DIST +=	$(DIST_MAINTHREAD)
+
+all: $(DIST)
+	@echo $(DIST) ready.
+
+tobin__ : $(DIST)
+	#@mkdir -p ../bin
+	#@mv $(DIST) ../bin
+	#@echo "Done, to ../bin for the object."
+
+$(DIST_MAINTHREAD):$(OBJS_MAINTHREAD_P)
+		$(CPP) -o $@ $^ $(LIBS)
+
+$(DIST_MULTITHREAD):$(OBJS_MULTITHREAD_P)
+		$(CPP) -o $@ $^ $(LIBS)
+
+#tar:	clean
+#		tar -czf $(PROJECT_NAME).tgz *.h *.cpp Makefile*
+
+-include *.d
+
+.c.o:
+	$(CC) -c $(CFLAGS) $< -o $@
+
+.cpp.o:
+	$(CPP) -c $(CFLAGS) $< -o $@
+
+clean:
+	#rm -f generalAgentMultiThread*
+	#find $(BASEDIR_SRC) -name "*.o" |xargs rm -f
+	#find $(BASEDIR_SRC) -name "*.d" |xargs rm -f
+	#find $(BASEDIR_SRC) -name "*.cfbk" |xargs rm -f
+	rm -f $(OBJS_MAINTHREAD_P) $(OBJS_MULTITHREAD_P) $(DIST)
+
+dirclean:clean
+	rm -f *.cfg*
+	rm -rf logs/
+	rm -rf ../bin/*
+
+prepare:all
+	#rm -rf ./spages
+	#cp -rf ../scripts/spages/geminilock .; mv geminilock spages
+	#cp -f ../scripts/spages/umconfig.txt .
+	#cp $(DIST) .
+
+sim:prepare
+	./$(DIST)
+
+#release all
+rel:prepare
+	rm -f $(DIST).tgz
+	#find ./spages/ -name ".svn" | xargs rm -rf
+	tar -czvf $(DIST).tgz $(DIST) #umconfig.txt #spages 
+
+dbg:prepare
+	cp $(DIST) /tmp/
+	#scp $(DIST) pss@192.168.9.99:~/liveStreamming/
+	#gts11AtHXYun
+	#scp -P 122 $(DIST) pss@10.2.10.43:~/
+	#ST-pss
+	#scp -P 22 $(DIST) pss@10.2.10.144:~/
+	#dlg216
+	#scp -P51035 $(DIST) pss@ca7ad6e72a6.ezlibs.com:~/
+

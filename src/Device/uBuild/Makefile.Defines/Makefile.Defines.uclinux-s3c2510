@@ -1,0 +1,41 @@
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+#
+# Makefile - /home/wujj/src/libs
+# Copyright (C) 2005 ezlibs.com, All Rights Reserved.
+# $Id: Makefile, v 1.0.0.1 2008-6-7 13:49:25 WuJunjie Exp $
+#
+# multi platform makefile
+#
+# Update:
+# 	2008-6-7 13:49:25 WuJunjie 10221 Create
+# 
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+
+CROSS   = arm-uclinux-elf-
+CC      = $(CROSS)gcc
+CPP     = $(CROSS)g++
+CXX     = $(CROSS)g++
+LD      = $(CROSS)ld
+AR      = $(CROSS)ar
+RANLIB  = $(CROSS)ranlib
+
+AR_FLAG = cru
+
+CFLAGS  += -Wall -O2 -Os
+CFLAGS  += -D_REENTRANT
+CFLAGS  += -msoft-float -mcpu=arm940t -mtune=arm940t
+CFLAGS  += -fomit-frame-pointer
+
+CFLAGS  += $(INCLUDE)
+#CFLAGS  += -D_VERSION='"$(VERSION)"'
+
+# uncomment depending on your operating system
+CFLAGS +=	-DLINUX
+CFLAGS +=       -DUCLINUX_S3C2510
+CFLAGS +=       -D_DEBUG
+
+LIBS +=		\
+		-lpthread
+
+#OBJS +=		Semaphore.o
+

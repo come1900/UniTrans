@@ -1,0 +1,116 @@
+http://47.100.49.48:50013/edges
+
+我想手动测试一下， 请帮我处理杀掉所有touch的网元;
+编译、复制、和准备运行环境， 包括创建日志目录
+
+
+mkdir -p ./local/; make -C ../libs/come.1/ install; make -f 93.Makefile.Touch.Edge rebuild ; make -f 93.Makefile.Touch.Ingress rebuild ; cp -f touch*-linux ./local/; cd local
+
+cd $HOME/svn/daily/src/appmodule/UniTrans/man/touch_manager && source wpyenv/bin/activate && DEFAULT_INGRESS_ID='local-127.0.0.1' DEFAULT_INGRESS_HOST='127.0.0.1' DATABASE_NAME='t-touch_manager.db' PORT='18051' python app.py
+
+=== Notice ===
+	* svr project must to use lic model.
+
+=== Project ===
+
+	UniTrans -- Unify Transform, include tcp/udp/http client and server, keep conn
+
+	01.Makefile.SMS.ASS                       : 中心服务器
+	03.Makefile.PuOverHttp                    : 设备端， 目前废止， 可由cu替代
+	04.Makefile.CuOverHttp                    : 客户端
+	05.Makefile.H2                            : 服务器
+	06.Makefile.GeminiLock                    : 双子锁
+	07.Makefile.InterUtcs                     : 信号系统对接，使用occi
+	08.Makefile.SC1ClientOverTcp              : 信号机客户端
+	09.Makefile.LiveStreamming                : 流媒体, 推流（鸿信流媒体）
+	09.01.Makefile.LiveStreamming.WShareHLS   : 微信分享只处理到hls， 不提供php的版本
+	09.02.Makefile.LiveStreamming.newMedia    : 基于流媒的NVR， _PROD_LiveStreammingNewMedia， 特殊的初始配置
+	09.Makefile.PullStreamming                : 鸿信流媒体 -- 逐步废弃 2017-04-25 15:53:31
+	10.Makefile.LiveCast                      : 直播 一般用于rtmp推流， hls播放的场合
+	10.01.Makefile.LiveDialog                 : 类似直播， 使用rtmp推流， rtsp播放， 延时小的场合
+	11.Makefile.LiveRecord                    : 中心存储
+	11.01.Makefile.LiveRecord.FileNoTimeMark  : FileNoTimeMark, 文件名不带时间， 特别版本
+	20.Makefile.InterVideo                    : 视频家
+	91.Makefile.Pandora.Matrix                : 鸿信监控云系统 母体， 唯一
+	93.Makefile.Pandora.Matrix.Single         : 直播平台， 单机版
+	92.Makefile.Pandora.Node                  : 节点
+	92.01.Makefile.Pandora.Node.rainMan       : 联网透传类项目，  —— 江苏司法考试
+	92.02.Makefile.Pandora.Node.sinVision     : 可视化 联网项目， —— C6
+	92.03.Makefile.Pandora.Node.vsa           : vsa
+
+	Revision: 389                 : src/Function/Pandora/ 可以用来做基于http的长连接的服务
+
+== Description ==
+	Unify Transform, include tcp/udp/http client and server, keep conn
+
+	./sms-uniTrans-linux -c /home/qosmon/wshop/bin/cfg-sms-uniTrans.cfg 
+
+== Frequently Asked Questions ==
+
+	= install =
+		在用户$(HOME)目录中解压本工程和libs
+		
+		makefile中使用的库位置采用$(HOME)变量，因此 libs 请解压到$(HOME)中， 如改到其他位置，请自行修改makefile
+	
+	= build =
+		Makefile
+			全功能版 Server
+
+		Makefile.Standalone
+			全功能版 Server，去除对日志、配置、uuid 模块的依赖， 使用自带library
+
+		Makefile.HttpConn
+			HTTP长连接客户端， 连接Webservice
+
+		Tcp长连接客户端， 连接tcpServer
+			Makefile.TcpConn
+
+== Bench ==
+	2019-03-20 14:58:40
+
+	keyManagementService-uniTrans-linux 
+	webbench -c 200 -t 30 http://36.99.35.230:18189/UniTrans/hello
+		Speed=156658 pages/min, 678851 bytes/sec.
+		Requests: 78329 susceed, 0 failed.
+
+	VS
+
+	Nginx
+	webbench -c 200 -t 30 http://61.160.149.164:18080/hls/8128CB18A9C_0_1.m3u8
+		Speed=108492 pages/min, 971003 bytes/sec.
+		Requests: 54246 susceed, 0 failed.
+
+
+= What about? =
+
+	Answer to foo bar dilemma.
+
+= How about? =
+
+	Answer to foo bar dilemma.
+
+== Changelog ==
+
+加入 touchEdge touchIngress
+AI 提示词：
+./src/Function/Touch目录下现有两个独立进程：touch_edge  touch_ingress；
+请仿照 ./src/Function/Pandora的方式， 
+将touch_edge集成为touchEdge;  touch_ingress集成为touchIngress
+集成步骤， 以touchIngress为例：
+1、集成：在目录：src/Function/Touch 中 增加g_AgentTouchIngress—— 类似 g_AgentPandoraNode（）， 可以先简单集成，只实现start 和 stop方法， 不需要的方法先不增加
+2、增加编译脚本：在./build 中增加 93.Makefile.Touch.Ingress
+
+类似的， 集成touchEdge， 编译脚本为：93.Makefile.Touch.Edge
+
+
+	= 1.01 =
+	* 2012-12-02 14:53:26
+	* 增加start的参数传入并生效.
+	* Another change.
+
+	= 1.0 =
+	* A change since the previous version.
+	* Another change.
+	
+
+== FileList ==

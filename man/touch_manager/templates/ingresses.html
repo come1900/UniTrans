@@ -1,0 +1,270 @@
+{% extends "base.html" %}
+
+{% block title %}Ingress列表 - Touch Manager{% endblock %}
+
+{% block content %}
+<!-- Stats Cards -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3 id="stat-total">-</h3>
+        <p>总Ingress数</p>
+    </div>
+    <div class="stat-card accent">
+        <h3 id="stat-online">-</h3>
+        <p>在线Ingress</p>
+    </div>
+    <div class="stat-card">
+        <h3 id="stat-enabled">-</h3>
+        <p>已启用</p>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #d93025 0%, #b31412 100%);">
+        <h3 id="stat-disabled">-</h3>
+        <p>已禁用</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="action-bar">
+        <h2>
+            <span class="material-icons">dns</span>
+            Ingress列表
+        </h2>
+        <div class="action-buttons">
+            <!-- Auto-refresh toggle (LuCI style) -->
+            <div class="auto-refresh-toggle">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="auto-refresh-toggle" checked onchange="toggleAutoRefresh()">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span id="auto-refresh-status" style="font-size: 13px; color: var(--accent-color); margin-left: 8px;">
+                    <span class="material-icons" style="font-size: 16px; vertical-align: middle;">autorenew</span>
+                    自动刷新
+                </span>
+            </div>
+            <button class="btn btn-primary" onclick="loadIngresses()">
+                <span class="material-icons">refresh</span>
+                刷新
+            </button>
+        </div>
+    </div>
+
+    <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <div>加载Ingress数据...</div>
+    </div>
+    
+    <div id="error" class="error" style="display: none;">
+        <span class="material-icons">error</span>
+        <span id="error-msg"></span>
+    </div>
+    
+    <div id="ingresses-container" style="display: none;">
+        <div class="table-container">
+        <table id="ingresses-table">
+            <thead>
+                <tr>
+                    <th>Ingress ID</th>
+                    <th>主机地址</th>
+                    <th>端口</th>
+                    <th>状态</th>
+                    <th>启用状态</th>
+                    <th>创建时间</th>
+                    <th style="width: 120px;">操作</th>
+                </tr>
+            </thead>
+            <tbody id="ingresses-tbody">
+            </tbody>
+        </table>
+        </div>
+    </div>
+    
+    <div id="empty" class="empty" style="display: none;">
+        <span class="material-icons" style="font-size: 48px; color: #ccc; margin-bottom: 16px;">dns</span>
+        <p>暂无Ingress数据</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Ingress状态常量
+const INGRESS_STATUS_OFFLINE = 0;  // 离线
+const INGRESS_STATUS_ONLINE = 1;   // 在线
+
+// 自动刷新状态
+let autoRefreshEnabled = true;
+let autoRefreshInterval = null;
+const AUTO_REFRESH_INTERVAL = 30000; // 30 seconds
+
+let allIngresses = [];
+
+function updateStats() {
+    const total = allIngresses.length;
+    const online = allIngresses.filter(i => i.status === INGRESS_STATUS_ONLINE).length;
+    const enabled = allIngresses.filter(i => i.enabled === true).length;
+    const disabled = allIngresses.filter(i => i.enabled === false).length;
+
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-online').textContent = online;
+    document.getElementById('stat-enabled').textContent = enabled;
+    document.getElementById('stat-disabled').textContent = disabled;
+}
+
+function loadIngresses() {
+    const loading = document.getElementById('loading');
+    const error = document.getElementById('error');
+    const container = document.getElementById('ingresses-container');
+    const empty = document.getElementById('empty');
+    const tbody = document.getElementById('ingresses-tbody');
+    
+    loading.style.display = 'flex';
+    error.style.display = 'none';
+    container.style.display = 'none';
+    empty.style.display = 'none';
+    
+    fetch('/api/v1/ingresses/list', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})})
+        .then(response => response.json())
+        .then(data => {
+            loading.style.display = 'none';
+            
+            if (data.code !== 0) {
+                document.getElementById('error-msg').textContent = '加载失败：' + (data.message || '未知错误');
+                error.style.display = 'flex';
+                return;
+            }
+            
+            allIngresses = data.ingresses || [];
+            updateStats();
+            
+            if (allIngresses.length === 0) {
+                empty.style.display = 'block';
+                return;
+            }
+            
+            renderIngresses();
+            container.style.display = 'block';
+        })
+        .catch(err => {
+            loading.style.display = 'none';
+            document.getElementById('error-msg').textContent = '加载失败：' + err.message;
+            error.style.display = 'flex';
+        });
+}
+
+function renderIngresses() {
+    const tbody = document.getElementById('ingresses-tbody');
+    tbody.innerHTML = '';
+
+    allIngresses.forEach(ingress => {
+        const row = document.createElement('tr');
+        const isOnline = ingress.status === INGRESS_STATUS_ONLINE || ingress.status === 1 || ingress.status === '1' || ingress.status === 'online';
+        const isEnabled = ingress.enabled === true;
+        const fromConfig = ingress.from_config === true;
+
+        row.innerHTML = `
+            <td><strong>${escapeHtml(ingress.ingress_id || '')}</strong>${fromConfig ? '<span style="font-size: 12px; color: var(--on-surface-hint); margin-left: 8px;">(config)</span>' : ''}</td>
+            <td>${escapeHtml(ingress.host || '')}</td>
+            <td>${ingress.port || ''}</td>
+            <td>
+                <span class="status-chip ${isOnline ? 'online' : 'offline'}">
+                    <span class="material-icons" style="font-size: 14px;">
+                        ${isOnline ? 'check_circle' : 'cancel'}
+                    </span>
+                    ${isOnline ? '在线' : '离线'}
+                </span>
+            </td>
+            <td>
+                <span class="status-chip ${isEnabled ? 'enabled' : 'disabled'}">
+                    <span class="material-icons" style="font-size: 14px;">
+                        ${isEnabled ? 'check_circle' : 'cancel'}
+                    </span>
+                    ${isEnabled ? '启用' : '禁用'}
+                </span>
+            </td>
+            <td>${ingress.created_at ? formatDateTime(ingress.created_at) : '-'}</td>
+            <td>
+                <div style="display: flex; gap: 4px;">
+                    ${fromConfig ? `
+                        <span style="font-size: 12px; color: var(--on-surface-hint);" title="在 config.py 中配置">
+                            <span class="material-icons" style="font-size: 16px; vertical-align: middle;">info</span>
+                            配置文件中
+                        </span>
+                    ` : `
+                        <button class="page-btn" style="min-width: 32px; height: 32px; opacity: 0.3; cursor: not-allowed;" disabled
+                            title="启用 Ingress（待开发）">
+                            <span class="material-icons" style="font-size: 16px; color: var(--accent-color);">check</span>
+                        </button>
+                        <button class="page-btn" style="min-width: 32px; height: 32px; opacity: 0.3; cursor: not-allowed;" disabled
+                            title="禁用 Ingress（待开发）">
+                            <span class="material-icons" style="font-size: 16px; color: var(--error-color);">close</span>
+                        </button>
+                    `}
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatDateTime(isoString) {
+    if (!isoString) return '-';
+    const date = new Date(isoString);
+    return date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+}
+
+// Auto-refresh control functions
+function toggleAutoRefresh() {
+    const toggle = document.getElementById('auto-refresh-toggle');
+    const status = document.getElementById('auto-refresh-status');
+    
+    autoRefreshEnabled = toggle.checked;
+    
+    if (autoRefreshEnabled) {
+        status.style.color = 'var(--accent-color)';
+        startAutoRefresh();
+    } else {
+        status.style.color = 'var(--on-surface-hint)';
+        stopAutoRefresh();
+    }
+}
+
+function startAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+    autoRefreshInterval = setInterval(() => {
+        if (autoRefreshEnabled) {
+            loadIngresses();
+        }
+    }, AUTO_REFRESH_INTERVAL);
+}
+
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+}
+
+// 页面加载时自动加载数据
+document.addEventListener('DOMContentLoaded', function() {
+    loadIngresses();
+    
+    // 启动自动刷新
+    startAutoRefresh();
+});
+</script>
+{% endblock %}

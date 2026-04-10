@@ -1,0 +1,12 @@
+# Makefile.SrcLists - Source file lists for come.1 library
+
+ifndef PREFIX_BASEDIR_SRC
+PREFIX_BASEDIR_SRC = .
+endif
+
+LIB_OBJS =      \
+		$(PREFIX_BASEDIR_SRC)/come.1.json.o
+
+LIB_SRCS =      \
+		$(PREFIX_BASEDIR_SRC)/come.1.json.cpp
+

@@ -1,0 +1,276 @@
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+#
+# 08.Makefile.SC1ClientOverTcp - Z:\daily\src\appmodule\UniTrans\build\
+#
+# Copyright (C) 2015 ezlibs.com, All Rights Reserved.
+#
+# $Id: 08.Makefile.SC1ClientOverTcp 1 2015-01-05 02:08:44 WuJunjie Exp $
+#
+# explain
+#      exp
+#
+# Update:
+#    2015-01-05 02:08 WuJunjie Create
+#
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+
+
+# platforms:
+PLATFORM = linux-x86-32
+#PLATFORM = linux-hi3515
+#PLATFORM = linux-arm
+#PLATFORM = linux-x86-64-centos5
+#PLATFORM = linux-am335x
+#PLATFORM = linux-mips-openwrt
+
+PROJECT_NAME=scc-UniTrans
+#KeepConnector
+
+DEF_VERSION =	1.3.4
+DIFF_VERSION =	1.0
+DEF_CONFIG_FILENAME_MAIN = cfg-$(PROJECT_NAME).cfg
+DEF_CONFIG_FILENAME_MAIN_DUPLICATE = cfg-$(PROJECT_NAME).cfg.duplicate
+DEF_LOG_FILENAME = log-$(PROJECT_NAME).log
+
+#include         Makefile.Defines.$(PLATFORM)
+include         Makefile.Defines/Makefile.Defines.$(PLATFORM)
+
+#CFLAGS =	-Wall -g -O2 -MD
+#CFLAGS += -D_DEBUG #debugme
+
+
+CFLAGS += -D_CONFIG_FILENAME_MAIN='"$(DEF_CONFIG_FILENAME_MAIN)"'
+CFLAGS += -D_CONFIG_FILENAME_MAIN_DUPLICATE='"$(DEF_CONFIG_FILENAME_MAIN_DUPLICATE)"'
+CFLAGS += -D_VERSION='"$(DEF_VERSION)"'
+CFLAGS += -D_LOG_FILENAME='"$(DEF_LOG_FILENAME)"'
+CFLAGS += -D_PROJECT_NAME='"$(PROJECT_NAME)"'
+
+##############################################################################
+# 代码文件位置
+BASEDIR_SRC=../src
+
+##############################################################################
+#库文件位置
+#使用自带库
+#EZLIBS_BASEDIR_LIBS=./libs
+
+##使用发布库
+EZLIBS_BASEDIR_LIBS=$(HOME)/libs
+
+BASEDIR_SRC_GENERALAGENT=$(BASEDIR_SRC)/Maintain
+
+OBJS_GENERALAGENT = \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentLog.o \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentHandler.o\
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentTcpSocket.o \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgent.o
+
+##############################################################################
+## 配置模块
+#ezConfig
+#CFLAGS += -D_USE_MODULES_EZCONFIG
+#CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezConfig
+#LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezConfig-$(PLATFORM)
+##json#thread
+#OBJS_CONFIGS	= \
+#		$(BASEDIR_SRC)/Configs/ConfigManager.o \
+#		$(BASEDIR_SRC)/Configs/ConfigGeneral.o \
+#		$(BASEDIR_SRC)/Configs/ConfigTcpSocketServer.o \
+#		$(BASEDIR_SRC)/Configs/ConfigTcpSocketConnector.o \
+#		$(BASEDIR_SRC)/Configs/ConfigConsoleOverTcp.o \
+#		$(BASEDIR_SRC)/Configs/ConfigWebService.o
+#
+###############################################################################
+### 日志模块
+ifeq ($(PLATFORM),linux-mips-openwrt)
+	CFLAGS += -D_USE_EZLOG_CLASSIC
+else ifeq ($(PLATFORM),linux-hi3515)
+	CFLAGS += -D_USE_EZLOG_CLASSIC
+else
+	#CFLAGS += -D_USE_LOG4CPP
+	#CFLAGS+=-I$(EZLIBS_BASEDIR_LIBS)/log4cplus-$(PLATFORM)/include
+	#LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/log4cplus-$(PLATFORM)/lib -llog4cplus -lrt
+
+	#同log4cpp互斥
+	CFLAGS += -D_USE_EZLOG_CLASSIC
+endif
+##############################################################################
+# 串行调试模块
+CFLAGS += -DFUNC_LOCAL_CONSOLE #串口调试接口
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Console/LocalConsole.o
+
+##############################################################################
+#以下功能可以随意组合， 但是至少保留一个功能，否则无意义
+#不需要的文件可以删除
+
+CFLAGS += -D_FUNC_CONSOLE_OVERTCP #远程调试接口
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralConsoleOverTcp.o
+
+#CFLAGS += -DEXAMPLE_SOCKET_STATUS_AGENT #tcp状态服务器
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/SocketStatusAgent.o
+
+
+#CFLAGS += -DEXAMPLE_GENERALAGENTHTTPKEEPCONNECTOR #http长连接客户端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentHttpKeepConnector.o
+
+				# 暂不使用， 调试 开发 ing 。。。
+				#CFLAGS += -DEXAMPLE_GENERALAGENTHTTPSOCKETCONNECTOR #http长连接客户端
+				#OBJS_GENERALAGENT += \
+				#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentHttpSocketConnector.o
+
+#CFLAGS += -DEXAMPLE_DATAPARSE_EXAMPLE #数据解析示例
+#
+#CFLAGS += -DEXAMPLE_GENERALAGENTTCPSOCKETSERVER #TCP服务端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentTcpSocketServer.o
+#
+#CFLAGS += -DEXAMPLE_GENERALAGENTTCPSOCKETCONNECTOR #tcp客户端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentTcpSocketConnector.o
+
+#CFLAGS += -DEXAMPLE_GENERALAGENTUDPSOCKETSERVER #UDP服务端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentUdpSocket.o
+#
+#CFLAGS += -DEXAMPLE_GENERALSOCKETPROCESSOR #使用单独的处理线程
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralSocketProcessor.o	\
+#		$(BASEDIR_SRC_GENERALAGENT)/SocketMsgQue.o
+#
+#CFLAGS += -DEXAMPLE_GENERALAGENTHTTPSERVER #HTTP服务端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentHttpServer.o
+#
+#CFLAGS += -DEXAMPLE_SIGNAL_ONDATA #使用数据回调机制
+#
+########################################################################################################
+###WebService服务器
+#CFLAGS += -DEXAMPLE_THE_WEBSERVICE
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/WebService/Session.o \
+#		$(BASEDIR_SRC)/WebService/WebServiceStack.o \
+#		$(BASEDIR_SRC)/WebService/HandlerWebService.o \
+#		$(BASEDIR_SRC)/WebService/HttpServerWebService.o \
+#		$(BASEDIR_SRC)/WebService/AgentWebService.o 
+
+#######################################################################################################
+##客户端软件
+#CFLAGS += -DUSE_CUOVERHTTP
+#
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/Stack/SmsStack.o
+#
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/CuOverHttp/HandlerCuOverHttp.o \
+#		$(BASEDIR_SRC)/Function/CuOverHttp/CuOverHttpKeepConnector.o \
+#		$(BASEDIR_SRC)/Function/CuOverHttp/AgentCuOverHttp.o
+#OBJS_CONFIGS += $(BASEDIR_SRC)/Configs/ConfigCuOverHttp.o 
+
+#######################################################################################################
+##信号机客户端软件
+CFLAGS += -DUSE_SC1ClientOverTcp
+
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Function/Stack/SmsStack.o
+
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Function/SC1ClientOverTcp/HandlerSC1ClientOverTcp.o \
+		$(BASEDIR_SRC)/Function/SC1ClientOverTcp/SC1ClientOverTcpKeepConnector.o \
+		$(BASEDIR_SRC)/Function/SC1ClientOverTcp/AgentSC1ClientOverTcp.o
+#OBJS_CONFIGS += $(BASEDIR_SRC)/Configs/ConfigCuOverHttp.o 
+
+##############################################################################
+# 授权管理模块
+CFLAGS += -DFUNC_gMiniLicense #gmini license
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Maintain/gMiniLicense.o
+
+##############################################################################
+#use ezutil library for http_parse
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezutil
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezutil-$(PLATFORM)
+#ezUtilCPP
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezUtilCPP/
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezUtilCPP-$(PLATFORM)
+
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ppSockets
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lppSockets-$(PLATFORM)
+
+## json
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/json
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -ljson-$(PLATFORM)
+#zlib
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/zlib
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -lz-$(PLATFORM)
+
+#
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezThread
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezThread-$(PLATFORM)
+LIBS += -lpthread -ldl
+
+#libsigc
+#CFLAGS+=-I$(EZLIBS_BASEDIR_LIBS)/libsigc++-$(PLATFORM)/lib/sigc++-2.0/include
+#CFLAGS+=-I$(EZLIBS_BASEDIR_LIBS)/libsigc++-$(PLATFORM)/include/sigc++-2.0
+#LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/libsigc++-$(PLATFORM)/lib/ -lsigc-2.0
+
+# 平台不支持uuid
+#ifeq ($(PLATFORM),linux-mips-openwrt)
+#else
+#CFLAGS += -DHAVE_LIBUUID
+#LIBS += -luuid
+#endif
+
+#利用main调用，不用ezthread库
+OBJS_MAINTHREAD_P = $(BASEDIR_SRC)/main.o
+OBJS_MAINTHREAD_P += $(OBJS_GENERALAGENT)
+OBJS_MAINTHREAD_P += $(OBJS_CONFIGS)
+DIST_MAINTHREAD = generalAgentMain-HttpConn-$(PLATFORM)
+
+#多线程，用ezthread库
+OBJS_MULTITHREAD_P = \
+		$(BASEDIR_SRC)/Solar.o \
+		$(BASEDIR_SRC)/Console/LocalConsole.o \
+		$(BASEDIR_SRC)/Console/FunConsole.o \
+		$(BASEDIR_SRC)/Main.o
+OBJS_MULTITHREAD_P += $(OBJS_GENERALAGENT)
+OBJS_MULTITHREAD_P += $(OBJS_CONFIGS)
+DIST_MULTITHREAD = $(PROJECT_NAME)-$(PLATFORM)
+
+DIST =	$(DIST_MULTITHREAD)
+#DIST +=	$(DIST_MAINTHREAD)
+
+all: $(DIST)
+	@mkdir -p ../bin
+	@mv $(DIST) ../bin
+	@echo "Done, to ../bin for the object."
+
+$(DIST_MAINTHREAD):$(OBJS_MAINTHREAD_P)
+		$(CPP) -o $@ $^ $(LIBS)
+
+$(DIST_MULTITHREAD):$(OBJS_MULTITHREAD_P)
+		$(CPP) -o $@ $^ $(LIBS)
+
+tar:	clean
+		tar -czf $(PROJECT_NAME).tgz *.h *.cpp Makefile*
+
+-include *.d
+
+.c.o:
+	$(CC) -c $(CFLAGS) $< -o $@
+
+.cpp.o:
+	$(CPP) -c $(CFLAGS) $< -o $@
+
+clean:
+	rm -f $(DIST)
+	find $(BASEDIR_SRC) -name "*.o" |xargs rm -f
+	find $(BASEDIR_SRC) -name "*.d" |xargs rm -f
+	find $(BASEDIR_SRC) -name "*.cfbk" |xargs rm -f
+
+dirclean:clean
+	rm -f generalConfig*.cfg*
+	rm -rf logs/

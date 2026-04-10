@@ -1,0 +1,103 @@
+2020-02-27 16:47:13
+	09.Makefile.LiveStreamming 1.4.2
+	11.Makefile.LiveRecord 1.1.1
+
+2019-10-19 19:21:14
+	92.03.Makefile.Pandora.Node.vsa 1.4.7
+
+2019-07-18 13:04:06
+	91.Makefile.Pandora.Matrix  1.4.0
+	92.Makefile.Pandora.Node 1.4.0
+		消息传递 -- eZAB
+
+2019-03-20 16:20:06
+	reversion 1509
+	22.Makefile.KeyManagementService 1.0.0
+		秘钥管理服务
+
+2018-09-27 10:33:37
+	09.Makefile.LiveStreamming		1.3.8
+		广告替换功能
+	92.Makefile.Pandora.Node		1.3.10
+		链路异常自动维护功能
+
+2018-09-14 17:23:42
+	91.Makefile.Pandora.Matrix  1.3.7
+	92.Makefile.Pandora.Node 1.3.9
+		shpc 远程管理
+
+2018-08-29 10:33:15
+	92.Makefile.Pandora.Node 1.3.8
+		支持纯水质控等任务开始
+
+2018-08-23 9:45:53
+	92.Makefile.Pandora.Node 1.3.7
+		支持cod
+2018-01-19 11:17:49
+	不再使用uuid库， - 慢， 用 ez_uuid 替代
+
+2017-06-28 11:24:53
+	不用 matrix node 模式
+
+2016-09-22 21:39:19
+	Pandora/Matrix Pandora/Node
+
+2016-09-18 9:54:59
+	pss 支持指定条目展示
+
+2016-08-19 8:23:26
+	版本号： 1.0.7
+	支持ip过滤
+	支持验证
+
+2016-08-15 8:22:26
+	支持码流通过指令选择
+
+2016-07-26 11:21:21
+	R 277 SuZhou sifa p
+
+2016-06-18 10:32:02
+	use puller class
+
+2016-06-15 19:50:37
+	完成hls和rtsp拉流服务
+
+2016-06-01 8:48:17
+	添加拉流服务
+	PullStreammingServer 
+	添加拉流服务， 执行拉流模块指令
+	
+2014-05-07 22:22:45
+	移植到3515 ok
+
+2014-3-20 20:59:55
+	使用
+
+2014-3-18 22:20:18
+	CDevUsbStorageKey 添加消息队列 -- ok 2014-3-20 16:09:07
+	ThreadProc use msg, rd f -- ok 2014-3-20 16:09:07
+	
+2013-07-15 13:34:24
+	增加主控类， 剥离 ：class CMaintainAgent
+	    const std::string &GetVersion();
+	    unsigned int GetRunPeriod();
+	    time_t GetStartTime();
+	
+2014-04-21 11:59:02
+	使用自有 libuuid
+
+2014-04-07 17:33:04
+	删除../src/Maintain/GeneralAgentHttpKeepConnector， 可用cu， pu替代
+	
+2013-12-31 15:11:05
+	-rw-rw-r-- 1 wujj dev 8485 Dec 30 16:40 00.Makefile.SMS.ASS
+	-rw-rw-r-- 1 wujj dev 7364 Dec 27 14:42 03.Makefile.PuOverHttp
+	-rw-rw-r-- 1 wujj dev 7380 Dec 27 14:42 04.Makefile.CuOverHttp
+
+Based: GeneralAgent
+	2013-12-19 18:29:01
+1.3.4 - 2013-12-10 16:42:03
+--------
+	1. add sms/stack/pubservice.
+	2. define different config filename in makefile
+

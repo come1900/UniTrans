@@ -1,0 +1,58 @@
+
+SDKVER    = 5.0
+
+IPHONE_TYPE = iPhoneSimulator
+
+DEVPATH = /SDK5.0/Platforms/$(IPHONE_TYPE).platform/Developer
+IPHONE_TYPE_SDK = $(DEVPATH)/SDKs/$(IPHONE_TYPE)$(SDKVER).sdk
+
+IPHONE_IP = 10.0.2.2
+
+RUN_PREFIX  = $(DEVPATH)/usr/bin
+
+CC      = $(RUN_PREFIX)/gcc
+CXX     = $(RUN_PREFIX)/g++
+LD      = $(CC)
+AR      = $(RUN_PREFIX)/ar
+
+RANLIB  = ranlib
+
+AR_FLAG = cru
+
+
+INCPATH += -I"$(IPHONE_TYPE_SDK)/usr/include"
+
+LDFLAGS=    -lobjc \
+            -bind_at_load \
+            -multiply_defined suppress \
+            -w
+			
+LDFLAGS += -framework CoreFoundation
+LDFLAGS += -framework Foundation
+LDFLAGS += -framework UIKit
+LDFLAGS += -F"$(IPHONE_TYPE_SDK)/System/Library/Frameworks"
+LDFLAGS += -F"$(IPHONE_TYPE_SDK)/System/Library/PrivateFrameworks"
+
+CFLAGS +=	-Wall -g $(INCLUDE) -MD -D_VERSION='"$(VERSION)"'
+
+#CFLAGS +=	-O0
+#-m32
+CFLAGS +=	-O2 -m32
+
+CFLAGS  += $(INCPATH) \
+#	-std=c99 \
+	-W \
+	-funroll-loops \
+	-Diphoneos_version_min=2.0 \
+	-Wno-unused-parameter \
+	-Wno-sign-compare
+
+CFLAGS += -F"$(IPHONE_TYPE_SDK)/System/Library/Frameworks"
+CFLAGS += -F"$(IPHONE_TYPE_SDK)/System/Library/PrivateFrameworks"
+
+# uncomment depending on your operating system
+CFLAGS +=	-DIOS
+
+LIBS +=		\
+		-L../lib/ios -lpj-arm-apple-darwin9 -lpjlib-util-arm-apple-darwin9 -lpjnath-arm-apple-darwin9 -lssl -lcrypto \
+		-lpthread

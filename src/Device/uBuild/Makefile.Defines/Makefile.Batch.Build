@@ -1,0 +1,43 @@
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+#
+# Makefile - /home/wujj/src/libs
+# Copyright (C) 2005 ezlibs.com, All Rights Reserved.
+# $Id: Makefile, v 1.0.0.1 2008-6-7 13:49:25 WuJunjie Exp $
+#
+# multi platform makefile
+#
+# Update:
+# 	2008-6-7 13:49:25 WuJunjie 10221 Create
+# 
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+
+# define variable if batch build
+# platforms:
+#  linux-x86-32
+#  win32-cygwin
+#  solaris9-sparc-64
+#  macosx
+#  solaris8
+#  uclinux-s3c2510
+#  linux-hi3510
+#  linux-hi3515
+#  linux-hi3516
+#  linux-dm320
+#  linux-dm365
+#  linux-mips-openwrt
+
+PLATFORM = linux-x86-32
+#PLATFORM = linux-x86-64
+#PLATFORM = linux-dm365
+#PLATFORM = linux-hi3515
+#PLATFORM = linux-hi3516
+#PLATFORM = macosx
+#PLATFORM = linux-arm
+#PLATFORM = linux-x86-64-centos5
+PLATFORM = linux-am335x
+#PLATFORM = linux-omap4460
+#for android
+#PLATFORM = linux-arm-none-gnueabi
+
+#PLATFORM = linux-mips-openwrt
+

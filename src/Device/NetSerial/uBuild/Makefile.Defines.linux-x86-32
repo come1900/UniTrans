@@ -1,0 +1,13 @@
+CC = gcc
+CPP = g++
+AR = ar
+RANLIB = ranlib
+AR_FLAG = cru
+CFLAGS +=	-Wall -g $(INCLUDE) -MD -D_VERSION='"$(VERSION)"'
+
+# turn off optimization if compiling with gcc 2.9.x:
+#CFLAGS +=	-O0
+CFLAGS +=	-O2 -m32
+
+# uncomment depending on your operating system
+CFLAGS +=	-DLINUX

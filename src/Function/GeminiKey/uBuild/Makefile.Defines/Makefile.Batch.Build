@@ -1,0 +1,36 @@
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+#
+# Makefile - /home/wujj/src/libs
+# Copyright (C) 2005 tiansu-china.com, All Rights Reserved.
+# $Id: Makefile, v 1.0.0.1 2008-6-7 13:49:25 WuJunjie Exp $
+#
+# multi platform makefile
+#
+# Update:
+# 	2008-6-7 13:49:25 WuJunjie 10221 Create
+# 
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+
+# define variable if batch build
+# platforms(../Readme.txt for details):
+
+PLATFORM = linux
+#PLATFORM = linux-x86-32
+#PLATFORM = linux-x86-64
+PLATFORM = linux-mips-openwrt
+#PLATFORM = android-armeabi
+#PLATFORM = android-mipsel
+#PLATFORM = android-x86
+#PLATFORM = osx
+#PLATFORM = ios-sim
+#PLATFORM = ios-dev
+#PLATFORM = linux-x86-64-centos5
+#PLATFORM = win32-cygwin
+#PLATFORM = linux-arm
+#PLATFORM = linux-am335x
+#PLATFORM = linux-dm320
+#PLATFORM = linux-dm365
+#PLATFORM = linux-hi3510
+#PLATFORM = linux-hi3515
+#PLATFORM = linux-hi3516
+#PLATFORM = linux-omap4460

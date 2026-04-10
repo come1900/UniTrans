@@ -1,0 +1,153 @@
+{
+   "General" : [
+      {
+         "01_No" : 8,
+         "02_Alias" : "UniTrans",
+         "03_Code" : "G1",
+         "04_ProductID" : "P987654321",
+         "05_HostID" : "",
+         "06_Vendor" : "ezlibs.com",
+         "07_Location" : "32.0427897449,118.7831210043",
+         "08_Description" : "cosmos",
+         "09_Serial" : "147232519145067",
+         "10_Version" : "1.5.2",
+         "11_maxLogSize" : 9437184,
+         "12_maxLogFile" : 6,
+         "13_levelLog" : 36,
+         "14_LogFilePath" : "\/home\/wujj\/logs",
+         "15_LogFileName" : "log-pandoraNode-uniTrans.log",
+         "16_DataFilePath" : "\/media\/wujj\/ecd33c07-cb18-4ee6-bae3-6843d5dc1174\/pi4\/workshop\/svn\/daily\/src\/appmodule\/UniTrans\/build",
+         "17_Pid" : "pandoraNode-uniTrans.pid",
+         "91_Language" : 1,
+         "92_LanguageSupport" : 65535
+      }
+   ],
+   "PandoraNode" : [
+      {
+         "AppKey" : "701819701",
+         "AppSecret" : "AppSecret",
+         "CheckPeriod" : 29,
+         "IpcChn" : 1,
+         "MatrixHost" : "vsa.pq.ezlibs.com",
+         "MatrixPort" : 18900,
+         "MaxConnSecs" : 900,
+         "NodeName" : "PN"
+      }
+   ],
+   "Serial" : [
+      {
+         "0_Enable" : 0,
+         "1_Channel" : 1,
+         "2_Device" : "\/dev\/ttyUSB0",
+         "3_Function" : "",
+         "4_Baud" : 9600,
+         "5_DataBits" : 8,
+         "6_Parity" : 0,
+         "7_StopBits" : 1
+      },
+      {
+         "0_Enable" : 0,
+         "1_Channel" : 2,
+         "2_Device" : "\/dev\/ttyUSB0",
+         "3_Function" : "",
+         "4_Baud" : 9600,
+         "5_DataBits" : 8,
+         "6_Parity" : 0,
+         "7_StopBits" : 1
+      },
+      {
+         "0_Enable" : 0,
+         "1_Channel" : 3,
+         "2_Device" : "\/dev\/ttyUSB0",
+         "3_Function" : "",
+         "4_Baud" : 9600,
+         "5_DataBits" : 8,
+         "6_Parity" : 0,
+         "7_StopBits" : 1
+      },
+      {
+         "0_Enable" : 0,
+         "1_Channel" : 4,
+         "2_Device" : "\/dev\/ttyUSB0",
+         "3_Function" : "",
+         "4_Baud" : 9600,
+         "5_DataBits" : 8,
+         "6_Parity" : 0,
+         "7_StopBits" : 1
+      }
+   ],
+   "Shp" : [
+      {
+         "0_Enable" : 0,
+         "1_Function" : "",
+         "2_LocalIP" : "",
+         "3_LocalPort" : 0,
+         "4_RemotePort" : 0,
+         "5_Type" : "",
+         "6_Description" : "",
+         "7_ServerAddr" : "",
+         "8_ServerPort" : 1,
+         "9_PrivilegeToken" : ""
+      },
+      {
+         "0_Enable" : 0,
+         "1_Function" : "",
+         "2_LocalIP" : "",
+         "3_LocalPort" : 0,
+         "4_RemotePort" : 0,
+         "5_Type" : "",
+         "6_Description" : "",
+         "7_ServerAddr" : "",
+         "8_ServerPort" : 1,
+         "9_PrivilegeToken" : ""
+      },
+      {
+         "0_Enable" : 0,
+         "1_Function" : "",
+         "2_LocalIP" : "",
+         "3_LocalPort" : 0,
+         "4_RemotePort" : 0,
+         "5_Type" : "",
+         "6_Description" : "",
+         "7_ServerAddr" : "",
+         "8_ServerPort" : 1,
+         "9_PrivilegeToken" : ""
+      },
+      {
+         "0_Enable" : 0,
+         "1_Function" : "",
+         "2_LocalIP" : "",
+         "3_LocalPort" : 0,
+         "4_RemotePort" : 0,
+         "5_Type" : "",
+         "6_Description" : "",
+         "7_ServerAddr" : "",
+         "8_ServerPort" : 1,
+         "9_PrivilegeToken" : ""
+      },
+      {
+         "0_Enable" : 0,
+         "1_Function" : "",
+         "2_LocalIP" : "",
+         "3_LocalPort" : 0,
+         "4_RemotePort" : 0,
+         "5_Type" : "",
+         "6_Description" : "",
+         "7_ServerAddr" : "",
+         "8_ServerPort" : 1,
+         "9_PrivilegeToken" : ""
+      },
+      {
+         "0_Enable" : 0,
+         "1_Function" : "",
+         "2_LocalIP" : "",
+         "3_LocalPort" : 0,
+         "4_RemotePort" : 0,
+         "5_Type" : "",
+         "6_Description" : "",
+         "7_ServerAddr" : "",
+         "8_ServerPort" : 1,
+         "9_PrivilegeToken" : ""
+      }
+   ]
+}

@@ -1,0 +1,42 @@
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+#
+# Makefile - /home/wujj/src/libs
+# Copyright (C) 2005 ezlibs.com, All Rights Reserved.
+# $Id: Makefile, v 1.0.0.1 2008-6-7 13:49:25 WuJunjie Exp $
+#
+# multi platform makefile
+#
+# Update:
+# 	2008-6-7 13:49:25 WuJunjie 10221 Create
+# 
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+
+CROSS   = arm-linux-
+CC      = $(CROSS)gcc
+CPP     = $(CROSS)g++
+CXX     = $(CROSS)g++
+LD      = $(CROSS)ld
+AR      = $(CROSS)ar
+RANLIB  = $(CROSS)ranlib
+STRIP	= $(CROSS)strip
+
+AR_FLAG = cru
+
+CFLAGS  += -Wall -O2 -Os
+CFLAGS  += -fomit-frame-pointer
+CFLAGS	+= -Wall -Wshadow -Wno-trigraphs  -Os -fno-strict-aliasing -fno-common -fno-strength-reduce -fomit-frame-pointer -mapcs-32 -march=armv5te -mtune=arm9tdmi -mshort-load-bytes  -msoft-float  -pipe  -D_REENTRANT
+
+CFLAGS  += $(INCLUDE)
+#CFLAGS  += -D_VERSION='"$(VERSION)"'
+
+# uncomment depending on your operating system
+CFLAGS +=	-DLINUX
+CFLAGS +=       -DLINUX_HI3510
+#CFLAGS +=       -D_DEBUG
+
+LIBS +=		\
+		-lssl -lcrypto \
+		-lpthread
+
+#OBJS +=		Semaphore.o
+

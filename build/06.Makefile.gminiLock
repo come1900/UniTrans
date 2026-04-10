@@ -1,0 +1,450 @@
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+#
+# 06.Makefile.GeminiLock - UniTrans\build\
+#
+# Copyright (C) 2014 ezlibs.com, All Rights Reserved.
+#
+# $Id: 06.Makefile.GeminiLock 1 2013-10-12 10:52:05 WuJunjie Exp $
+#
+# explain
+#      GeminiLock Only, bk from Makefile at 201-05-08 13:33:22
+#
+# Update:
+#    2012-10-18 10:52 WuJunjie Create
+#    2013-12-20 14:11 WuJunjie add sms ass files
+#    2014-02-08 21:00 WuJunjie add FaceWebs
+#    2014-05-08 13:32 WuJunjie FaceWebs on hi3515
+#    2014-11-12 17:20 WuJunjie InterThings_gLock server for GeminiLock
+#
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+
+#
+# platforms:
+PLATFORM = linux
+#PLATFORM = linux-x86-32
+#no log4cpp
+#PLATFORM = linux-hi3515
+#PLATFORM = linux-arm
+#PLATFORM = linux-x86-64-centos5
+#PLATFORM = linux-am335x
+#android
+#PLATFORM = linux-arm-none-gnueabi
+#no log4cpp 
+#PLATFORM = linux-mips-openwrt
+PLATFORM = linux-mips-mipsl-openwrt
+
+PROJECT_NAME=gminiLock
+
+DEF_VERSION =	1.3.5
+DIFF_VERSION =	1.3.4
+DEF_CONFIG_FILENAME_MAIN = cfg-$(PROJECT_NAME).cfg
+DEF_CONFIG_FILENAME_MAIN_DUPLICATE = cfg-$(PROJECT_NAME).cfg.duplicate
+DEF_LOG_FILENAME = log-$(PROJECT_NAME).log
+
+#include         Makefile.Defines.$(PLATFORM)
+include         Makefile.Defines/Makefile.Defines.$(PLATFORM)
+
+#CFLAGS =	-Wall -g -O2 -MD
+#CFLAGS += -D_DEBUG #debugme
+
+CFLAGS += -D_VERSION='"$(DEF_VERSION)"'
+CFLAGS += -D_LOG_FILENAME='"$(DEF_LOG_FILENAME)"'
+CFLAGS += -D_PROJECT_NAME='"$(PROJECT_NAME)"'
+##############################################################################
+# 代码文件位置
+BASEDIR_SRC=../src
+
+##############################################################################
+#库文件位置
+#使用自带库, 目前自带 android 和 x86-32的库
+#EZLIBS_BASEDIR_LIBS=../libs
+
+##使用发布库
+EZLIBS_BASEDIR_LIBS=$(HOME)/libs
+
+BASEDIR_SRC_GENERALAGENT=$(BASEDIR_SRC)/Maintain
+
+OBJS_GENERALAGENT = \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentLog.o \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentHandler.o\
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentTcpSocket.o \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgent.o
+
+##############################################################################
+# 配置模块
+# Use ezConfig
+CFLAGS += -D_USE_MODULES_EZCONFIG
+CFLAGS += -D_CONFIG_FILENAME_MAIN='"$(DEF_CONFIG_FILENAME_MAIN)"'
+CFLAGS += -D_CONFIG_FILENAME_MAIN_DUPLICATE='"$(DEF_CONFIG_FILENAME_MAIN_DUPLICATE)"'
+
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezConfig
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezConfig-$(PLATFORM)
+#json#thread
+OBJS_CONFIGS	= \
+		$(BASEDIR_SRC)/Configs/ConfigManager.o \
+		$(BASEDIR_SRC)/Configs/ConfigGeneral.o
+
+###############################################################################
+### 日志模块
+ifeq ($(PLATFORM),linux-mips-openwrt)
+	CFLAGS += -D_USE_EZLOG_CLASSIC
+else ifeq ($(PLATFORM),linux-hi3515)
+	CFLAGS += -D_USE_EZLOG_CLASSIC
+else
+	#CFLAGS += -D_USE_LOG4CPP
+	#CFLAGS+=-I$(EZLIBS_BASEDIR_LIBS)/log4cplus-$(PLATFORM)/include
+	#LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/log4cplus-$(PLATFORM)/lib -llog4cplus -lrt
+
+	#同log4cpp互斥
+    CFLAGS += -D_USE_EZLOG_CLASSIC
+endif
+
+##############################################################################
+## 串行调试模块
+CFLAGS += -DFUNC_LOCAL_CONSOLE #串口调试接口
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Console/LocalConsole.o
+
+##############################################################################
+#以下功能可以随意组合， 但是至少保留一个功能，否则无意义
+#不需要的文件可以删除
+
+CFLAGS += -D_FUNC_CONSOLE_OVERTCP #远程调试接口
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralConsoleOverTcp.o
+OBJS_CONFIGS += $(BASEDIR_SRC)/Configs/ConfigConsoleOverTcp.o 
+
+#CFLAGS += -DEXAMPLE_SOCKET_STATUS_AGENT #tcp状态服务器
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/SocketStatusAgent.o
+
+#CFLAGS += -DEXAMPLE_GENERALAGENTHTTPKEEPCONNECTOR #http协议的客户端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentHttpKeepConnector.o
+
+#CFLAGS += -DEXAMPLE_DATAPARSE_EXAMPLE #数据解析示例
+#
+#CFLAGS += -DEXAMPLE_GENERALAGENTTCPSOCKETSERVER #TCP服务端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentTcpSocketServer.o
+#OBJS_CONFIGS += $(BASEDIR_SRC)/Configs/ConfigTcpSocketServer.o
+
+#CFLAGS += -DEXAMPLE_GENERALAGENTTCPSOCKETCONNECTOR #tcp客户端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentTcpSocketConnector.o
+#OBJS_CONFIGS += $(BASEDIR_SRC)/Configs/ConfigTcpSocketConnector.o 
+
+#CFLAGS += -DEXAMPLE_GENERALAGENTUDPSOCKETSERVER #UDP服务端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentUdpSocket.o
+#
+#CFLAGS += -DEXAMPLE_GENERALSOCKETPROCESSOR #使用单独的处理线程
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralSocketProcessor.o	\
+#		$(BASEDIR_SRC_GENERALAGENT)/SocketMsgQue.o
+#
+#CFLAGS += -DEXAMPLE_GENERALAGENTHTTPSERVER #HTTP服务端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentHttpServer.o
+#
+#CFLAGS += -DEXAMPLE_SIGNAL_ONDATA #使用数据回调机制
+
+##############################################################################
+##数据库服务器
+#CFLAGS += -DEXAMPLE_DATABASE
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/xxxxxxxxxxxxx.o \
+#OBJS_CONFIGS += $(BASEDIR_SRC)/Configs/ConfigDatabase.o 
+
+##############################################################################
+# 网络串口
+CFLAGS += -D_DEV_NetSerialTCPSOCKETCONNECTOR
+NetSerial_BASEDIR_SRC=$(BASEDIR_SRC)/Device/NetSerial/src/
+OBJS_NetSerial = \
+		$(NetSerial_BASEDIR_SRC)/NetSerialLog.o \
+		$(NetSerial_BASEDIR_SRC)/NetSerialHandler.o\
+		$(NetSerial_BASEDIR_SRC)/NetSerialTcpSocket.o \
+		$(NetSerial_BASEDIR_SRC)/NetSerial.o
+OBJS_CONFIGS += $(BASEDIR_SRC)/Configs/ConfigNetSerialTcpCli.o
+
+# -cli
+OBJS_NetSerial += \
+		$(NetSerial_BASEDIR_SRC)/NetSerialTcpSocketConnector.o
+
+CFLAGS += -DEXAMPLE_SIGNAL_ONDATA #使用数据回调机制
+
+##############################################################################
+# 串口设备
+CFLAGS += -D_DEV_SERIAL
+CFLAGS += -I${EZLIBS_BASEDIR_LIBS}/include/ezserial
+LIBS += -L${EZLIBS_BASEDIR_LIBS}/lib -lezserial-$(PLATFORM)
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Device/DevSerial.o    \
+		$(BASEDIR_SRC)/Device/carry_io_board.o
+
+#OBJS_CONFIGS += $(BASEDIR_SRC)/Configs/ConfigSerial.o
+
+##############################################################################
+##WebService服务器
+#CFLAGS += -DEXAMPLE_THE_WEBSERVICE
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/WebService/Session.o \
+#		$(BASEDIR_SRC)/WebService/WebServiceStack.o \
+#		$(BASEDIR_SRC)/WebService/HandlerWebService.o \
+#		$(BASEDIR_SRC)/WebService/HttpServerWebService.o \
+#		$(BASEDIR_SRC)/WebService/AgentWebService.o 
+#OBJS_CONFIGS += $(BASEDIR_SRC)/Configs/ConfigWebService.o 
+
+#######################################################################################################
+##PubService服务器
+#CFLAGS += -DUSE_PUBSERVICE
+#
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/PubService/HandlerPubService.o \
+#		$(BASEDIR_SRC)/Function/PubService/HttpServerPubService.o \
+#		$(BASEDIR_SRC)/Function/PubService/AgentPubService.o
+#OBJS_CONFIGS += $(BASEDIR_SRC)/Configs/ConfigPubService.o
+
+#######################################################################################################
+##SmsOverHttp服务器
+#CFLAGS += -DUSE_SMSOVERHTTP
+#
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/Stack/SmsStack.o
+#
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/SmsOverHttp/HandlerSmsOverHttp.o \
+#		$(BASEDIR_SRC)/Function/SmsOverHttp/HttpServerSmsOverHttp.o \
+#		$(BASEDIR_SRC)/Function/SmsOverHttp/AgentSmsOverHttp.o
+#OBJS_CONFIGS += $(BASEDIR_SRC)/Configs/ConfigSmsOverHttp.o 
+
+#######################################################################################################
+
+#######################################################################################################
+##Ass服务器
+#CFLAGS += -DUSE_ASSOVERHTTP
+#
+##OBJS_GENERALAGENT += \
+##		$(BASEDIR_SRC)/Function/Stack/SmsStack.o
+#
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/AssOverHttp/HandlerAssOverHttp.o \
+#		$(BASEDIR_SRC)/Function/AssOverHttp/HttpServerAssOverHttp.o \
+#		$(BASEDIR_SRC)/Function/AssOverHttp/AgentAssOverHttp.o
+
+#######################################################################################################
+##客户端软件
+#CFLAGS += -DUSE_CUOVERHTTP
+#
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/Stack/SmsStack.o
+#
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/CuOverHttp/HandlerCuOverHttp.o \
+#		$(BASEDIR_SRC)/Function/CuOverHttp/CuOverHttpKeepConnector.o \
+#		$(BASEDIR_SRC)/Function/CuOverHttp/AgentCuOverHttp.o
+##OBJS_CONFIGS += $(BASEDIR_SRC)/Configs/ConfigCuOverHttp.o 
+
+#######################################################################################################
+##web管理功能 —— 浏览器管理
+CFLAGS += -DXP_FaceWebs
+
+#CFLAGS  += -DUSER_MANAGEMENT_SUPPORT
+# Digest Access switch
+#CFLAGS  += -DDIGEST_ACCESS_SUPPORT
+#   CFLAGS  += -DUSE_USB_INTERFACE -D__UNIT_TEST -DDEV_ENOCEAN_SUPPORT
+#CFLAGS  += -DUSE_PROCESS_THREAD
+CFLAGS  += -DCHECK_STATUS_THREAD
+CFLAGS += -I${EZLIBS_BASEDIR_LIBS}/include/ezutil
+LIBS += -L${EZLIBS_BASEDIR_LIBS}/lib -lezutil-$(PLATFORM)
+CFLAGS += -I$(HOME)/libs/include/ezsocket
+LIBS += -L$(HOME)/libs/lib -lezsocket-$(PLATFORM)
+
+CFLAGS  += -DWEBS -DOS="LINUX" -DLINUX
+CFLAGS += -I${EZLIBS_BASEDIR_LIBS}/include/aspwebs
+LIBS += -L${EZLIBS_BASEDIR_LIBS}/lib -laspwebs-$(PLATFORM) -lpthread
+CFLAGS += -I${EZLIBS_BASEDIR_LIBS}/include/ezplatform
+LIBS += -L${EZLIBS_BASEDIR_LIBS}/lib -lezplatform-$(PLATFORM)
+CFLAGS += -I${EZLIBS_BASEDIR_LIBS}/include/ezutil_platform
+LIBS += -L${EZLIBS_BASEDIR_LIBS}/lib -lezutil_platform-$(PLATFORM) -lrt
+
+OBJS_CONFIGS+=$(BASEDIR_SRC)/Configs/ConfigFaceWebs.o
+
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/FaceWebs/FaceWebs.o      \
+		$(BASEDIR_SRC)/FaceWebs/ez_asp_webs.o      \
+		$(BASEDIR_SRC)/FaceWebs/websFunction.o
+
+#######################################################################################################
+##GeminiLock, 需要用到devserial 或者netserial 或者二者均使用
+CFLAGS += -DFUNC_GEMINILOCK
+
+OBJS_CONFIGS+=$(BASEDIR_SRC)/Configs/ConfigGeminiLock.o
+
+CFLAGS+=-I$(EZLIBS_BASEDIR_LIBS)/openssl-$(PLATFORM)/include
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/openssl-$(PLATFORM)/lib -lcrypto
+
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Function/GeminiKey/GeminiKey.o      \
+		$(BASEDIR_SRC)/Function/GeminiKey/GeminiKeyStack.o	\
+		$(BASEDIR_SRC)/Function/GeminiLock/FunGeminiLock.o				\
+		$(BASEDIR_SRC)/Device/DevLock_D1.o
+
+#CFLAGS += -DFUNC_UsbStorageKey
+OBJS_GENERALAGENT+=$(BASEDIR_SRC)/Device/DevHotPlug.o
+OBJS_GENERALAGENT+=$(BASEDIR_SRC)/Device/DevUsbStorageKey.o
+#OBJS_GENERALAGENT+=$(BASEDIR_SRC)/Function/GeminiLock/FunUsbStorageKey.o
+
+#######################################################################################################
+#InterThings_gLock服务器，for GeminiLock
+CFLAGS += -D_USE_InterThings_gLock
+
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Function/Stack/gLock/InterThings_gLockStack.o
+
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Function/InterThings/gLock/HandlerInterThings_gLock.o \
+		$(BASEDIR_SRC)/Function/InterThings/gLock/HttpServerInterThings_gLock.o \
+		$(BASEDIR_SRC)/Function/InterThings/gLock/AgentInterThings_gLock.o
+OBJS_CONFIGS += $(BASEDIR_SRC)/Configs/ConfigInterThings_gLock.o 
+
+##############################################################################
+#CFLAGS += -DFUNC_KnxIpCu
+#OBJS_CONFIGS+=$(BASEDIR_SRC)/Configs/ConfigKnxIpCu.o
+
+##############################################################################
+#CFLAGS += -DFUNC_KnxIpGw
+#OBJS_CONFIGS+=$(BASEDIR_SRC)/Configs/ConfigKnxIpGw.o
+
+
+
+##############################################################################
+# use ezutil library for http_parse
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezutil
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezutil-$(PLATFORM)
+# ezUtilCPP
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezUtilCPP/
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezUtilCPP-$(PLATFORM)
+
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ppSockets
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lppSockets-$(PLATFORM)
+
+## json
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/json
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -ljson-$(PLATFORM)
+#
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezThread
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezThread-$(PLATFORM)
+LIBS +=	-lpthread -ldl
+##zlib
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/zlib
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -lz-$(PLATFORM)
+
+#libsigc, do not use it now, use mysignal instead
+#CFLAGS+=-I$(EZLIBS_BASEDIR_LIBS)/libsigc++-$(PLATFORM)/lib/sigc++-2.0/include
+#CFLAGS+=-I$(EZLIBS_BASEDIR_LIBS)/libsigc++-$(PLATFORM)/include/sigc++-2.0
+#LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/libsigc++-$(PLATFORM)/lib/ -lsigc-2.0
+
+CFLAGS += -DHAVE_LIBUUID
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -luuid-$(PLATFORM)
+
+#利用main调用，不用ezthread库
+OBJS_MAINTHREAD_P = $(BASEDIR_SRC)/main.o
+OBJS_MAINTHREAD_P += $(OBJS_GENERALAGENT)
+OBJS_MAINTHREAD_P += $(OBJS_CONFIGS)
+OBJS_MAINTHREAD_P += $(OBJS_NetSerial)
+DIST_MAINTHREAD = $(PROJECT_NAME)MainThread-$(PLATFORM)
+
+#多线程，用ezthread库
+OBJS_MULTITHREAD_P = \
+		$(BASEDIR_SRC)/Solar.o \
+		$(BASEDIR_SRC)/Console/LocalConsole.o \
+		$(BASEDIR_SRC)/Console/FunConsole.o \
+		$(BASEDIR_SRC)/Main.o
+OBJS_MULTITHREAD_P += $(OBJS_GENERALAGENT)
+OBJS_MULTITHREAD_P += $(OBJS_CONFIGS)
+OBJS_MULTITHREAD_P += $(OBJS_NetSerial)
+DIST_MULTITHREAD = $(PROJECT_NAME)-$(PLATFORM)
+#DIST_MULTITHREAD = ../bin/$(PROJECT_NAME)-$(PLATFORM)
+
+#动态库方式，供c等调用
+OBJS_DYN_LIBS = \
+		$(BASEDIR_SRC)/Solar.o \
+		$(BASEDIR_SRC)/LocalConsole.o \
+		$(BASEDIR_SRC)/UniTrans.o
+OBJS_DYN_LIBS += $(OBJS_GENERALAGENT)
+OBJS_DYN_LIBS += $(OBJS_CONFIGS)
+OBJS_DYN_LIBS += $(OBJS_NetSerial)
+DYN_LIBS = lib$(PROJECT_NAME)-$(PLATFORM).so
+PATH_DYN_LIBS = ../outlib
+
+DIST =	$(DIST_MULTITHREAD)
+#服务器不要使用这种方式
+#DIST +=	$(DIST_MAINTHREAD)
+
+all: $(DIST)
+	@mkdir -p ../bin
+	#@mv $(DIST) ../bin
+	#@echo "Done, to ../bin for the object."
+
+dbg: $(DIST)
+	@mv $(DIST) /home/share/glock
+
+$(DIST_MAINTHREAD):$(OBJS_MAINTHREAD_P)
+		$(CPP) -o $@ $^ $(LIBS)
+
+$(DIST_MULTITHREAD):$(OBJS_MULTITHREAD_P)
+		$(CPP) -o $@ $^ $(LIBS)
+
+dyn:$(DYN_LIBS)
+	@mkdir -p $(PATH_DYN_LIBS)
+	@mv $(DYN_LIBS) $(PATH_DYN_LIBS)
+	@echo "Done, to $(PATH_DYN_LIBS) for the object."
+
+dyndbg:all
+	gcc -c ../src/main.c -I../src -std=gnu99  
+	gcc -o uni main.o -L../outlib/ -luniTrans-linux-x86-32
+	#export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:../outlib/
+	#./uni
+
+$(DYN_LIBS):$(OBJS_DYN_LIBS)
+		$(CPP) -shared -o $@ $^ $(LIBS)
+
+#tar:	clean
+#		tar -czf $(PROJECT_NAME).tgz *.h *.cpp Makefile*
+
+-include *.d
+
+.c.o:
+	$(CC) -c $(CFLAGS) $< -o $@
+
+.cpp.o:
+	$(CPP) -c $(CFLAGS) $< -o $@
+
+clean:
+	find $(BASEDIR_SRC) -name "*.o" |xargs rm -f
+	find $(BASEDIR_SRC) -name "*.d" |xargs rm -f
+	find $(BASEDIR_SRC) -name "*.cfbk" |xargs rm -f
+
+dirclean:clean
+	sudo rm -f cfg-*.cfg*
+	sudo rm -rf logs/
+	rm -rf ../bin/*
+	rm -rf ./spages umconfig.txt
+	rm -rf $(PATH_DYN_LIBS)
+
+prepare:all
+	rm -rf ./spages
+	cp -rf ../scripts/spages/geminilock .; mv geminilock spages
+	cp -f ../scripts/spages/umconfig.txt .
+	#cp $(DIST) .
+
+sim:prepare
+	sudo ./$(DIST)
+
+#release all
+rel:prepare
+	rm -f gll.tgz
+	find ./spages/ -name ".svn" | xargs rm -rf
+	tar -czvf gll.tgz $(DIST) umconfig.txt spages 

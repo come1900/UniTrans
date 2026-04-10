@@ -1,0 +1,358 @@
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+#
+# 10.Makefile.Pandora.Matrix - Z:\svn\daily\src\appmodule\UniTrans\build\
+#
+# Copyright (C) 2016 ezlibs.com, All Rights Reserved.
+#
+# $Id: 10.Makefile.Pandora.Matrix 1 2016-09-23 05:11:30 WuJunjie Exp $
+#
+# explain
+#      exp
+#
+# Update:
+#    2020-07-20 17:44 1.5.1, zab support
+#    2019-11-08 17:32 shpc get
+#    2016-09-23 05:11 WuJunjie Create
+#
+#-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-
+#
+# platforms:
+PLATFORM = linux
+#PLATFORM = linux-x86-32
+#PLATFORM = linux-hi3515
+#PLATFORM = linux-arm
+#PLATFORM = linux-x86-64
+#PLATFORM = linux-x86-64-centos5
+#PLATFORM = linux-am335x
+#android
+#PLATFORM = linux-arm-none-gnueabi
+#PLATFORM = linux-mips-openwrt
+#PLATFORM = linux-mips-mipsl-openwrt
+#PLATFORM = macosx
+
+PROJECT_NAME=pandoraMatrix-uniTrans
+
+DEF_VERSION =	1.5.1
+DIFF_VERSION =	1.5.0
+DEF_CONFIG_FILENAME_MAIN = cfg-$(PROJECT_NAME).cfg
+DEF_CONFIG_FILENAME_MAIN_DUPLICATE = cfg-$(PROJECT_NAME).cfg.duplicate
+DEF_LOG_FILENAME = log-$(PROJECT_NAME).log
+
+#include         Makefile.Defines.$(PLATFORM)
+include         Makefile.Defines/Makefile.Defines.$(PLATFORM)
+
+#CFLAGS =	-Wall -g -O2 -MD
+#CFLAGS += -D_DEBUG #debugme
+
+CFLAGS += -D_CONFIG_FILENAME_MAIN='"$(DEF_CONFIG_FILENAME_MAIN)"'
+CFLAGS += -D_CONFIG_FILENAME_MAIN_DUPLICATE='"$(DEF_CONFIG_FILENAME_MAIN_DUPLICATE)"'
+CFLAGS += -D_VERSION='"$(DEF_VERSION)"'
+CFLAGS += -D_LOG_FILENAME='"$(DEF_LOG_FILENAME)"'
+CFLAGS += -D_PROJECT_NAME='"$(PROJECT_NAME)"'
+
+##############################################################################
+# 代码文件位置
+BASEDIR_SRC=../src
+
+##############################################################################
+#库文件位置
+#使用自带库, 目前自带 android 和 x86-32的库
+#EZLIBS_BASEDIR_LIBS=../libs
+
+##使用发布库
+EZLIBS_BASEDIR_LIBS=$(HOME)/libs
+
+BASEDIR_SRC_GENERALAGENT=$(BASEDIR_SRC)/Maintain
+
+OBJS_GENERALAGENT = \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentLog.o \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentHandler.o\
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentTcpSocket.o \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgent.o
+
+##############################################################################
+# 配置模块
+# Use ezConfig
+CFLAGS += -D_USE_MODULES_EZCONFIG
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezConfig
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezConfig-$(PLATFORM)
+#json#thread
+OBJS_CONFIGS	= \
+		$(BASEDIR_SRC)/Configs/ConfigManager.o \
+		$(BASEDIR_SRC)/Configs/ConfigGeneral.o \
+		$(BASEDIR_SRC)/Configs/ConfigConsoleOverTcp.o \
+		$(BASEDIR_SRC)/Configs/ConfigPandoraMatrix.o
+
+###############################################################################
+### 日志模块
+ifeq ($(PLATFORM),linux-mips-openwrt)
+	CFLAGS += -D_USE_EZLOG_CLASSIC
+else ifeq ($(PLATFORM),linux-hi3515)
+	CFLAGS += -D_USE_EZLOG_CLASSIC
+else
+	#CFLAGS += -D_USE_LOG4CPP
+	#CFLAGS+=-I$(EZLIBS_BASEDIR_LIBS)/log4cplus-$(PLATFORM)/include
+	#LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/log4cplus-$(PLATFORM)/lib -llog4cplus -lrt
+
+	#同log4cpp互斥
+	#CFLAGS += -D_USE_EZLOG_CLASSIC
+	CFLAGS += -D_USE_EZLOG_FILENAME
+endif
+
+##############################################################################
+## 串行调试模块
+CFLAGS += -DFUNC_LOCAL_CONSOLE #串口调试接口
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Console/LocalConsole.o
+
+##############################################################################
+#改为基本组件
+CFLAGS += -I$(HOME)/libs/include/gmini
+LIBS   += -L$(HOME)/libs/lib -lgmini-$(PLATFORM)
+
+# 授权管理模块
+ifeq ($(PLATFORM),linux)
+	CFLAGS += -D_FUNC_gMiniLicense #gmini license
+
+	OBJS_GENERALAGENT += \
+			$(BASEDIR_SRC)/Maintain/gMiniLicense.o
+else ifeq ($(PLATFORM),linux-mips-mipsl-openwrt)
+	#CFLAGS += -D_FUNC_gMiniLicense
+else
+	#CFLAGS += -D_FUNC_gMiniLicense
+endif
+
+##############################################################################
+#以下功能可以随意组合， 但是至少保留一个功能，否则无意义
+#不需要的文件可以删除
+
+CFLAGS += -D_FUNC_CONSOLE_OVERTCP #远程调试接口
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC_GENERALAGENT)/GeneralConsoleOverTcp.o
+
+#CFLAGS += -DEXAMPLE_SOCKET_STATUS_AGENT #tcp状态服务器
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/SocketStatusAgent.o
+
+#CFLAGS += -DEXAMPLE_GENERALAGENTHTTPKEEPCONNECTOR #http协议的客户端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentHttpKeepConnector.o
+
+#CFLAGS += -DEXAMPLE_DATAPARSE_EXAMPLE #数据解析示例
+#
+#CFLAGS += -DEXAMPLE_GENERALAGENTTCPSOCKETSERVER #TCP服务端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentTcpSocketServer.o
+
+#CFLAGS += -DEXAMPLE_GENERALAGENTTCPSOCKETCONNECTOR #tcp客户端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentTcpSocketConnector.o
+
+#CFLAGS += -DEXAMPLE_GENERALAGENTUDPSOCKETSERVER #UDP服务端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentUdpSocket.o
+#
+#CFLAGS += -DEXAMPLE_GENERALSOCKETPROCESSOR #使用单独的处理线程
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralSocketProcessor.o	\
+#		$(BASEDIR_SRC_GENERALAGENT)/SocketMsgQue.o
+#
+#CFLAGS += -DEXAMPLE_GENERALAGENTHTTPSERVER #HTTP服务端
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC_GENERALAGENT)/GeneralAgentHttpServer.o
+#
+#CFLAGS += -DEXAMPLE_SIGNAL_ONDATA #使用数据回调机制
+
+#######################################################################################################
+##WebService服务器
+#CFLAGS += -DEXAMPLE_THE_WEBSERVICE
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/WebService/Session.o \
+#		$(BASEDIR_SRC)/WebService/WebServiceStack.o \
+#		$(BASEDIR_SRC)/WebService/HandlerWebService.o \
+#		$(BASEDIR_SRC)/WebService/HttpServerWebService.o \
+#		$(BASEDIR_SRC)/WebService/AgentWebService.o 
+
+#######################################################################################################
+##PubService服务器
+#CFLAGS += -DUSE_PUBSERVICE
+#
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/PubService/HandlerPubService.o \
+#		$(BASEDIR_SRC)/Function/PubService/HttpServerPubService.o \
+#		$(BASEDIR_SRC)/Function/PubService/AgentPubService.o
+
+#######################################################################################################
+##PandoraMatrix服务器
+CFLAGS += -D_FUNC_PandoraMatrix
+
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Function/Stack/UniTransRestStack.o \
+		$(BASEDIR_SRC)/Function/Stack/pq/PqStack.o
+
+CFLAGS += -D_USE_DB_FILE
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/sqlite++
+LIBS   += -L$(EZLIBS_BASEDIR_LIBS)/lib -lsqlite++-$(PLATFORM)
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/sqlite
+LIBS   += -L$(EZLIBS_BASEDIR_LIBS)/lib -lsqlite-$(PLATFORM)
+
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/DBAgent/DbKeyValue.o \
+		$(BASEDIR_SRC)/DBAgent/CacheKeyValue.o
+
+CFLAGS += -D_FUNC_OAuth20_GRestful
+OBJS_GENERALAGENT += \
+		$(BASEDIR_SRC)/Function/Pandora/MsgContainer.o \
+		$(BASEDIR_SRC)/Function/Pandora/StreamContainer.o \
+		$(BASEDIR_SRC)/Function/Pandora/StreamUtility.o \
+		$(BASEDIR_SRC)/Function/Interface/GRestHttpdSocket.o \
+		$(BASEDIR_SRC)/Function/Interface/HandlerGRestHttpdSocket.o \
+		$(BASEDIR_SRC)/Function/Pandora/Matrix/HandlerPandoraMatrix.o \
+		$(BASEDIR_SRC)/Function/Pandora/Matrix/HttpServerPandoraMatrix.o \
+		$(BASEDIR_SRC)/Function/Pandora/Matrix/UdpServerPandoraMatrix.o \
+		$(BASEDIR_SRC)/Function/Pandora/Matrix/AgentPandoraMatrix.o
+
+#CFLAGS += -D_FUNC_PusherTykdServer
+#单机版，如果去掉则使用云版本, 云版本中不需要配置直播信息
+#CFLAGS += -D_FUNC_PusherTykdServer_SingleServer
+#OBJS_CONFIGS	+= \
+#		$(BASEDIR_SRC)/Configs/ConfigPullTykdMobileService.o
+
+#OBJS_CONFIGS	+= \
+#		$(BASEDIR_SRC)/Configs/ConfigPusherTykdServer.o
+#
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/PusherTykdServer/HandlerPusherTykdServer.o \
+#		$(BASEDIR_SRC)/Function/PusherTykdServer/HttpServerPusherTykdServer.o \
+#		$(BASEDIR_SRC)/Function/PusherTykdServer/AgentPusherTykdServer.o
+
+#######################################################################################################
+##Ass服务器
+#CFLAGS += -DUSE_ASSOVERHTTP
+#
+##OBJS_GENERALAGENT += \
+##		$(BASEDIR_SRC)/Function/Stack/SmsStack.o
+#
+#OBJS_GENERALAGENT += \
+#		$(BASEDIR_SRC)/Function/AssOverHttp/HandlerAssOverHttp.o \
+#		$(BASEDIR_SRC)/Function/AssOverHttp/HttpServerAssOverHttp.o \
+#		$(BASEDIR_SRC)/Function/AssOverHttp/AgentAssOverHttp.o
+
+##############################################################################
+# socket相关简单封装
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezsocket
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezsocket-$(PLATFORM)
+# 同平台有关的工具类接口
+CFLAGS += -I${EZLIBS_BASEDIR_LIBS}/include/ezutil_platform
+LIBS += -L${EZLIBS_BASEDIR_LIBS}/lib -lezutil_platform-$(PLATFORM) -lrt
+# ezUtilCPP
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezUtilCPP/
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezUtilCPP-$(PLATFORM)
+# 纯算法工具接口
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezutil
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezutil-$(PLATFORM)
+
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ppSockets
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lppSockets-$(PLATFORM)
+
+## json
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/json
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -ljson-$(PLATFORM)
+#
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezThread
+LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezThread-$(PLATFORM)
+LIBS +=	-lpthread -ldl
+##zlib
+CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/zlib
+LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -lz-$(PLATFORM)
+
+#libsigc, do not use it now, use mysignal instead
+#CFLAGS+=-I$(EZLIBS_BASEDIR_LIBS)/libsigc++-$(PLATFORM)/lib/sigc++-2.0/include
+#CFLAGS+=-I$(EZLIBS_BASEDIR_LIBS)/libsigc++-$(PLATFORM)/include/sigc++-2.0
+#LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/libsigc++-$(PLATFORM)/lib/ -lsigc-2.0
+
+ifeq ($(PLATFORM),macosx)
+
+else
+	#CFLAGS += -DHAVE_LIBUUID
+	#CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include
+	#LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -luuid-$(PLATFORM)
+endif
+
+#利用main调用，不用ezthread库
+OBJS_MAINTHREAD_P = $(BASEDIR_SRC)/main.o
+OBJS_MAINTHREAD_P += $(OBJS_GENERALAGENT)
+OBJS_MAINTHREAD_P += $(OBJS_CONFIGS)
+DIST_MAINTHREAD = $(PROJECT_NAME)MainThread-$(PLATFORM)
+
+#多线程，用ezthread库
+OBJS_MULTITHREAD_P = \
+		$(BASEDIR_SRC)/Solar.o \
+		$(BASEDIR_SRC)/Console/FunConsole.o \
+		$(BASEDIR_SRC)/Main.o
+OBJS_MULTITHREAD_P += $(OBJS_GENERALAGENT)
+OBJS_MULTITHREAD_P += $(OBJS_CONFIGS)
+DIST_MULTITHREAD = $(PROJECT_NAME)-$(PLATFORM)
+
+DIST =	$(DIST_MULTITHREAD)
+#服务器不要使用这种方式
+#DIST +=	$(DIST_MAINTHREAD)
+
+all: $(DIST)
+	@mkdir -p ../bin
+	#@mv $(DIST) ../bin
+	#@echo "Done, to ../bin for the object."
+
+$(DIST_MAINTHREAD):$(OBJS_MAINTHREAD_P)
+		$(CPP) -o $@ $^ $(LIBS)
+
+$(DIST_MULTITHREAD):$(OBJS_MULTITHREAD_P)
+		$(CPP) -o $@ $^ $(LIBS)
+
+#tar:	clean
+#		tar -czf $(PROJECT_NAME).tgz *.h *.cpp Makefile*
+
+-include *.d
+
+.c.o:
+	$(CC) -c $(CFLAGS) $< -o $@
+
+.cpp.o:
+	$(CPP) -c $(CFLAGS) $< -o $@
+
+clean:
+	#rm -f generalAgentMultiThread*
+	#find $(BASEDIR_SRC) -name "*.o" |xargs rm -f
+	#find $(BASEDIR_SRC) -name "*.d" |xargs rm -f
+	#find $(BASEDIR_SRC) -name "*.cfbk" |xargs rm -f
+	rm -f $(OBJS_MAINTHREAD_P) $(OBJS_MULTITHREAD_P) $(DIST)
+
+dirclean:clean
+	rm -f *.cfg*
+	rm -rf logs/
+	rm -rf ../bin/*
+
+prepare:all
+	#rm -rf ./spages
+	#cp -rf ../scripts/spages/geminilock .; mv geminilock spages
+	#cp -f ../scripts/spages/umconfig.txt .
+	#cp $(DIST) .
+
+sim:prepare
+	./$(DIST)
+
+#release all
+rel:prepare
+	rm -f $(DIST).tgz
+	#find ./spages/ -name ".svn" | xargs rm -rf
+	tar -czvf $(DIST).tgz $(DIST) #umconfig.txt #spages 
+	
+dbg:prepare
+	#cp ./$(DIST) /home/wujj/helper/data/
+	#scp pandoraMatrix-uniTrans-linux wujj@219.147.89.78:~/
+	#scp pandoraMatrix-uniTrans-linux wujj@221.224.144.51:~/pandoraMatrix/
+	#scp pandoraMatrix-uniTrans-linux wujj@121.196.203.151:~/
+	scp -P122 $(DIST) wujj@42.101.46.55:~/pandoraMatrix/
+	#scp -P19088 pandoraMatrix-uniTrans-linux wujj@202.102.101.134:/home/wujj/pandoraMatrix
+

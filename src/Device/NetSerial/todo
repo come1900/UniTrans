@@ -1,0 +1,6 @@
+2013-07-15 13:34:24
+	增加主控类， 剥离 ：class CGeneralAgent
+	    const std::string &GetVersion();
+	    unsigned int GetRunPeriod();
+	    time_t GetStartTime();
+

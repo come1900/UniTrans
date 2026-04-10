@@ -1,0 +1,70 @@
+# Copyright (C) 2012  WuJunjie(Joy.Woo@hotmail.com)
+
+# platforms:
+#  linux-x86-32
+#  uclinux-s3c2510
+
+PLATFORM = linux
+#PLATFORM = linux-x86-32
+#PLATFORM = linux-hi3515
+#PLATFORM = linux-arm
+
+VERSION =	1.0
+DIFF_VERSION =	0.9
+
+DIST =		         \
+	cacheKeyValue
+
+CFLAGS =	-Wall -g -O2 -MD
+CFLAGS += -D_DEBUG #debugme
+
+include         ~/svn/daily/src/library/Makefile.Defines/Makefile.Defines.$(PLATFORM)
+
+CFLAGS += -D_FUNC_STANDALONE_UTIL_MF
+CFLAGS += -D_USE_DB_FILE
+
+CFLAGS += -I$(HOME)/libs/include/ezUtilCPP
+LIBS   += -L$(HOME)/libs/lib -lezUtilCPP-$(PLATFORM)
+CFLAGS += -I$(HOME)/libs/include/sqlite++
+LIBS   += -L$(HOME)/libs/lib -lsqlite++-$(PLATFORM)
+CFLAGS += -I$(HOME)/libs/include/sqlite
+LIBS   += -L$(HOME)/libs/lib -lsqlite-$(PLATFORM)
+
+CFLAGS += -I$(HOME)/libs/include/ezThread
+LIBS   += -L$(HOME)/libs/lib -lezThread-$(PLATFORM)
+
+LIBS   += -ldl -lpthread
+
+CPPFLAGS =	$(CFLAGS) 
+
+CLEAN_FILES = $(DIST) ../*.o *.gdb ../*.d ../*.cfbk *.s3
+
+.c.o:
+	$(CC) -c $(CFLAGS) $< -o $@
+
+.cpp.o:
+	$(CPP) -c $(CFLAGS) $< -o $@
+
+all: $(DIST)
+
+clean: 
+	rm -f $(CLEAN_FILES)
+###########################################
+dbPandoraMatrix: ../DbPandoraMatrix.o
+	$(CPP) -o $@ $^ $(LIBS)
+
+cacheKeyValue:   ../CacheKeyValue.o ../DbKeyValue.o
+	$(CPP) -o $@ $^ $(LIBS)
+
+dbLiveRecord:    ../DbLiveRecord.o
+	$(CPP) -o $@ $^ $(LIBS)
+
+dbLiveStreamming:../DbLiveStreamming.o
+	$(CPP) -o $@ $^ $(LIBS)
+
+dbLiveCast:      ../DbLiveCast.o
+	$(CPP) -o $@ $^ $(LIBS)
+dbKeyValue:      ../DbKeyValue.o
+	$(CPP) -o $@ $^ $(LIBS)
+
+-include	*.d

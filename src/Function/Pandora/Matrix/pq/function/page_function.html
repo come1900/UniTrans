@@ -1,0 +1,90 @@
+<script>
+function showHint(str, strCh) {
+    if (str.length == 0 || strCh.length == 0) { 
+        document.getElementById("txtHint").innerHTML = "";
+        return;
+    } else {
+
+        var con;
+        con=confirm("Sure reboot?");
+
+        var xmlhttp = new XMLHttpRequest();
+        xmlhttp.onreadystatechange = function() {
+            if (this.readyState == 4 && this.status == 200) {
+                document.getElementById("txtHint").innerHTML = this.responseText;
+            }
+        };
+
+        if(con==true){
+                xmlhttp.open("GET", "do_reboot.php?para=" + str + "&devid=" + strCh, true);
+                xmlhttp.send();
+
+		alert("Reboot command has been sended.");
+        }
+	else {
+		alert("Do Nothing.");
+	}
+    }
+}
+</script>
+
+<html>
+<head>
+
+<title>可视化传感和控制网络</title>
+<meta charset="utf-8">
+<!--
+<link rel="stylesheet" href="/images/css.css" type="text/css" />
+-->
+<style>
+    body {
+        width: 45em;
+        margin: 0 auto;
+        font-family: Tahoma, Verdana, Arial, sans-serif;
+    }
+</style>
+
+</head>
+<body>
+
+<!--v-->
+<h1>PQ-reboot</h1>
+<!--v-->
+
+<!--
+<p><b>操作区:</b></p>
+<form> 
+Input 1 or 0: <input type="text" onkeyup="showHint(this.value)">
+</form>
+<p>
+1: <a href="javascript:showHint('1', '1');">On</a>  | <a href="javascript:showHint('0', '1');">Off</a> <br>
+2: <a href="javascript:showHint('1', '2');">On</a>  | <a href="javascript:showHint('0', '2');">Off</a> <br>
+3: <a href="javascript:showHint('1', '3');">On</a>  | <a href="javascript:showHint('0', '3');">Off</a> <br>
+4: <a href="javascript:showHint('1', '4');">On</a>  | <a href="javascript:showHint('0', '4');">Off</a> <br>
+</p>
+-->
+<p align="center"><b>远程控制:</b>
+
+<b>第一路</b>:
+<button type="button" onclick="showHint('1', 'G1664065432')">Reboot</button> | 
+<button type="button" onclick="showHint('0', '1')">关</button>
+
+<b>第二路</b>:
+<button type="button" onclick="showHint('1', '2')">开</button> |
+<button type="button" onclick="showHint('0', '2')">关</button>
+
+<b>第三路</b>:
+<button type="button" onclick="showHint('1', '3')">开</button> |
+<button type="button" onclick="showHint('0', '3')">关</button>
+
+<b>第四路</b>:
+<button type="button" onclick="showHint('1', '4')">开</button> |
+<button type="button" onclick="showHint('0', '4')">关</button>
+
+</p>
+<!--
+<p>Message: <span id="txtHint"></span></p>
+-->
+<p align="right"><em>Thanks. -- 1811 588 6801@189.cn</em></p>
+</body>
+</html>

@@ -1,0 +1,617 @@
+{% extends "base.html" %}
+
+{% block title %}设备列表 - Touch Manager{% endblock %}
+
+{% block content %}
+<!-- Stats Cards -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <h3 id="stat-total">-</h3>
+        <p>总设备数</p>
+    </div>
+    <div class="stat-card accent">
+        <h3 id="stat-online">-</h3>
+        <p>在线设备</p>
+    </div>
+    <div class="stat-card">
+        <h3 id="stat-confirmed">-</h3>
+        <p>已确认</p>
+    </div>
+    <div class="stat-card" style="background: linear-gradient(135deg, #d93025 0%, #b31412 100%);">
+        <h3 id="stat-rejected">-</h3>
+        <p>黑名单</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="action-bar">
+        <h2>
+            <span class="material-icons">devices</span>
+            设备列表
+        </h2>
+        <div class="action-buttons">
+            <!-- Auto-refresh toggle (LuCI style) -->
+            <div class="auto-refresh-toggle">
+                <label class="toggle-switch">
+                    <input type="checkbox" id="auto-refresh-toggle" checked onchange="toggleAutoRefresh()">
+                    <span class="toggle-slider"></span>
+                </label>
+                <span id="auto-refresh-status" style="font-size: 13px; color: var(--accent-color); margin-left: 8px;">
+                    <span class="material-icons" style="font-size: 16px; vertical-align: middle;">autorenew</span>
+                    自动刷新
+                </span>
+            </div>
+            <button class="btn btn-secondary" id="batch-confirm-btn" onclick="batchConfirm()" style="display: none;">
+                <span class="material-icons">check_circle</span>
+                批量确认
+            </button>
+            <button class="btn btn-secondary" id="batch-reject-btn" onclick="batchReject()" style="display: none;">
+                <span class="material-icons">cancel</span>
+                批量拒绝
+            </button>
+            <button class="btn btn-primary" onclick="loadEdges()">
+                <span class="material-icons">refresh</span>
+                刷新
+            </button>
+        </div>
+    </div>
+
+    <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <div>加载设备数据...</div>
+    </div>
+    
+    <div id="error" class="error" style="display: none;">
+        <span class="material-icons">error</span>
+        <span id="error-msg"></span>
+    </div>
+    
+    <div id="edges-container" style="display: none;">
+        <div class="table-container">
+        <table id="edges-table">
+            <thead>
+                <tr>
+                        <th style="width: 40px;">
+                            <input type="checkbox" id="select-all" onchange="toggleSelectAll()">
+                        </th>
+                        <th>设备 ID</th>
+                    <th>设备类型</th>
+                    <th>状态</th>
+                        <th>确认</th>
+                    <th>Ingress ID</th>
+                    <th>链接时长</th>
+                        <th style="width: 120px;">操作</th>
+                </tr>
+            </thead>
+            <tbody id="edges-tbody">
+            </tbody>
+        </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination-container">
+            <div class="pagination-info" id="pagination-info">
+                显示 0 - 0 共 0 条
+            </div>
+            <div class="pagination-controls">
+                <div class="page-size-selector">
+                    <label for="page-size">每页显示:</label>
+                    <select id="page-size" onchange="changePageSize()">
+                        <option value="20" selected>20</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+                <button class="page-btn" id="btn-first" onclick="goToPage(1)" disabled>
+                    <span class="material-icons">first_page</span>
+                </button>
+                <button class="page-btn" id="btn-prev" onclick="goToPage(currentPage - 1)" disabled>
+                    <span class="material-icons">chevron_left</span>
+                </button>
+                <span id="page-indicator" style="margin: 0 8px; color: var(--on-surface-hint);">第 1 页</span>
+                <button class="page-btn" id="btn-next" onclick="goToPage(currentPage + 1)" disabled>
+                    <span class="material-icons">chevron_right</span>
+                </button>
+                <button class="page-btn" id="btn-last" onclick="goToPage(totalPages)" disabled>
+                    <span class="material-icons">last_page</span>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="empty" class="empty" style="display: none;">
+        <span class="material-icons">inbox</span>
+        <p>暂无设备数据</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// 设备状态常量（与后端一致）
+const EDGE_STATUS_OFFLINE = 0;  // 离线
+const EDGE_STATUS_ONLINE = 1;   // 在线
+
+// 分页状态
+let currentPage = 1;
+let pageSize = 20;
+let totalPages = 1;
+let totalEdges = 0;  // 后端返回的总数
+let selectedEdges = new Set();
+let autoRefreshEnabled = true;
+let autoRefreshInterval = null;
+const AUTO_REFRESH_INTERVAL = 30000; // 30 seconds
+
+// 状态转换函数（用于显示）
+function edgeStatusToStr(status) {
+    return status === EDGE_STATUS_ONLINE ? '在线' : '离线';
+}
+
+function loadEdges() {
+    const loading = document.getElementById('loading');
+    const error = document.getElementById('error');
+    const container = document.getElementById('edges-container');
+    const empty = document.getElementById('empty');
+    
+    loading.style.display = 'flex';
+    error.style.display = 'none';
+    container.style.display = 'none';
+    empty.style.display = 'none';
+
+    fetch('/api/v1/edges/list', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            page: currentPage,
+            page_size: pageSize
+        })
+    })
+        .then(response => response.json())
+        .then(data => {
+            loading.style.display = 'none';
+
+            if (data.code !== 0) {
+                error.textContent = '加载失败：' + (data.message || '未知错误');
+                error.style.display = 'flex';
+                return;
+            }
+
+            allEdges = data.edges || [];
+            totalEdges = data.total || 0;  // 保存后端返回的总数
+            
+            // 使用后端返回的全局统计数据
+            const stats = data.stats || {};
+            updateStats(stats);
+
+            if (allEdges.length === 0 && totalEdges === 0) {
+                empty.style.display = 'block';
+                return;
+            }
+
+            // 计算总页数（使用后端返回的总数）
+            totalPages = Math.ceil(totalEdges / pageSize);
+            if (currentPage > totalPages) {
+                currentPage = totalPages;
+            }
+
+            // 清理已删除设备的选择状态
+            const currentEdgeIds = new Set(allEdges.map(e => e.edge_id));
+            for (const id of selectedEdges) {
+                if (!currentEdgeIds.has(id)) {
+                    selectedEdges.delete(id);
+                }
+            }
+
+            renderEdges(allEdges);  // 直接渲染后端返回的数据
+            updatePagination();
+            updateBatchButtons();
+            container.style.display = 'block';
+        })
+        .catch(err => {
+            loading.style.display = 'none';
+            error.textContent = '加载失败：' + err.message;
+            error.style.display = 'flex';
+        });
+}
+
+function updateStats(stats) {
+    // 使用后端返回的全局统计数据
+    const total = totalEdges;  // 总数（受过滤条件影响）
+    const online = stats.total_online || 0;  // 全局在线
+    const confirmed = stats.total_confirmed || 0;  // 全局已确认
+    const rejected = stats.total_rejected || 0;  // 全局黑名单
+
+    document.getElementById('stat-total').textContent = total;
+    document.getElementById('stat-online').textContent = online;
+    document.getElementById('stat-confirmed').textContent = confirmed;
+    document.getElementById('stat-rejected').textContent = rejected;
+}
+
+function renderEdges(edgeList) {
+    const tbody = document.getElementById('edges-tbody');
+
+    tbody.innerHTML = '';
+    edgeList.forEach(edge => {
+        const row = document.createElement('tr');
+        const isOnline = edge.status === EDGE_STATUS_ONLINE;
+        const confirmed = edge.confirmed;  // 99=pending, 1=confirmed, 0=rejected
+        const isPending = (confirmed === 99);
+        const isConfirmed = (confirmed === 1);
+        const isRejected = (confirmed === 0);
+        const isSelected = selectedEdges.has(edge.edge_id);
+
+        row.innerHTML = `
+            <td>
+                <input type="checkbox" class="edge-checkbox"
+                    data-edge-id="${escapeHtml(edge.edge_id)}"
+                    ${isSelected ? 'checked' : ''}
+                    onchange="toggleEdgeSelection('${escapeHtml(edge.edge_id)}')">
+            </td>
+            <td><strong>${escapeHtml(edge.edge_id || '')}</strong></td>
+            <td>${escapeHtml(edge.edge_type || '')}</td>
+            <td>
+                <span class="status-chip ${isOnline ? 'online' : 'offline'}">
+                    <span class="material-icons" style="font-size: 14px;">
+                        ${isOnline ? 'check_circle' : 'cancel'}
+                    </span>
+                    ${isOnline ? '在线' : '离线'}
+                </span>
+            </td>
+            <td>
+                ${isRejected ? `
+                <span class="status-chip" style="background-color: #721c24; color: #f8d7da;">
+                    <span class="material-icons" style="font-size: 14px;">block</span>
+                    黑名单
+                </span>
+                ` : isConfirmed ? `
+                <span class="status-chip enabled">
+                    <span class="material-icons" style="font-size: 14px;">check_circle</span>
+                    已确认
+                </span>
+                ` : `
+                <span class="status-chip disabled">
+                    <span class="material-icons" style="font-size: 14px;">pending</span>
+                    待确认
+                </span>
+                `}
+            </td>
+            <td>${escapeHtml(edge.ingress_id || '-')}</td>
+            <td>${edge.status === EDGE_STATUS_ONLINE ? formatDuration(edge.link_duration || 0) : '-'}</td>
+            <td>
+                <div style="display: flex; gap: 4px;">
+                    ${isRejected ? `
+                    <!-- 黑名单边缘：只能确认（打勾） -->
+                    <button class="page-btn" style="min-width: 32px; height: 32px;"
+                        onclick="confirmEdge('${escapeHtml(edge.edge_id)}')"
+                        title="确认边缘（移出黑名单）">
+                        <span class="material-icons" style="font-size: 16px; color: var(--accent-color);">check</span>
+                    </button>
+                    <button class="page-btn" style="min-width: 32px; height: 32px; opacity: 0.3;" disabled
+                        title="已在黑名单，无需拒绝">
+                        <span class="material-icons" style="font-size: 16px;">close</span>
+                    </button>
+                    ` : isConfirmed ? `
+                    <!-- 已确认边缘：确认按钮灰色，拒绝按钮可用 -->
+                    <button class="page-btn" style="min-width: 32px; height: 32px; opacity: 0.3;" disabled
+                        title="已确认，无需重复确认">
+                        <span class="material-icons" style="font-size: 16px;">check</span>
+                    </button>
+                    <button class="page-btn" style="min-width: 32px; height: 32px;"
+                        onclick="rejectEdge('${escapeHtml(edge.edge_id)}')"
+                        title="拒绝边缘（加入黑名单）">
+                        <span class="material-icons" style="font-size: 16px; color: var(--error-color);">close</span>
+                    </button>
+                    ` : `
+                    <!-- 待确认边缘：两个按钮都可用 -->
+                    <button class="page-btn" style="min-width: 32px; height: 32px;"
+                        onclick="confirmEdge('${escapeHtml(edge.edge_id)}')"
+                        title="确认边缘">
+                        <span class="material-icons" style="font-size: 16px; color: var(--accent-color);">check</span>
+                    </button>
+                    <button class="page-btn" style="min-width: 32px; height: 32px;"
+                        onclick="rejectEdge('${escapeHtml(edge.edge_id)}')"
+                        title="拒绝边缘（加入黑名单）">
+                        <span class="material-icons" style="font-size: 16px; color: var(--error-color);">close</span>
+                    </button>
+                    `}
+                    <!-- 删除按钮：所有边缘都显示 -->
+                    <button class="page-btn" style="min-width: 32px; height: 32px;"
+                        onclick="deleteEdge('${escapeHtml(edge.edge_id)}')"
+                        title="删除边缘">
+                        <span class="material-icons" style="font-size: 16px; color: #dc3545;">delete</span>
+                    </button>
+                </div>
+            </td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function getEdgeStatusClass(edge) {
+    if (edge.confirmed === 99) return 'disabled';  // pending
+    if (edge.confirmed && edge.status === EDGE_STATUS_ONLINE) return 'online';
+    return 'offline';
+}
+
+function getEdgeStatusIcon(edge) {
+    if (edge.confirmed === 99) return 'pending';  // pending
+    if (edge.confirmed && edge.status === EDGE_STATUS_ONLINE) return 'check_circle';
+    return 'cancel';
+}
+
+function getEdgeStatusText(edge) {
+    if (edge.confirmed === 99) return '待确认';  // pending
+    if (edge.confirmed && edge.status === EDGE_STATUS_ONLINE) return '在线';
+    return '离线';
+}
+
+function toggleSelectAll() {
+    const selectAll = document.getElementById('select-all');
+    const checkboxes = document.querySelectorAll('.edge-checkbox');
+    
+    checkboxes.forEach(cb => {
+        if (!cb.disabled) {
+            cb.checked = selectAll.checked;
+            toggleEdgeSelection(cb.dataset.edgeId, selectAll.checked);
+        }
+    });
+}
+
+function toggleEdgeSelection(edgeId, forceState = null) {
+    if (forceState === true) {
+        selectedEdges.add(edgeId);
+    } else if (forceState === false) {
+        selectedEdges.delete(edgeId);
+    } else {
+        if (selectedEdges.has(edgeId)) {
+            selectedEdges.delete(edgeId);
+        } else {
+            selectedEdges.add(edgeId);
+        }
+    }
+    updateBatchButtons();
+}
+
+function updateBatchButtons() {
+    const count = selectedEdges.size;
+    const batchConfirmBtn = document.getElementById('batch-confirm-btn');
+    const batchRejectBtn = document.getElementById('batch-reject-btn');
+
+    // 根据选中的设备数量显示按钮
+    if (count > 0) {
+        batchConfirmBtn.style.display = 'inline-flex';
+        batchRejectBtn.style.display = 'inline-flex';
+        batchConfirmBtn.innerHTML = `<span class="material-icons">check_circle</span> 确认 (${count})`;
+        batchRejectBtn.innerHTML = `<span class="material-icons">cancel</span> 拒绝 (${count})`;
+    } else {
+        batchConfirmBtn.style.display = 'none';
+        batchRejectBtn.style.display = 'none';
+        batchConfirmBtn.innerHTML = `<span class="material-icons">check_circle</span> 批量确认`;
+        batchRejectBtn.innerHTML = `<span class="material-icons">cancel</span> 批量拒绝`;
+    }
+}
+
+function updatePagination() {
+    // 使用后端返回的总数计算显示范围
+    const start = (currentPage - 1) * pageSize + 1;
+    const end = Math.min(currentPage * pageSize, totalEdges);
+    const total = totalEdges;
+
+    // 如果当前页没有数据,显示 0
+    const displayStart = total === 0 ? 0 : start;
+    const displayEnd = total === 0 ? 0 : end;
+
+    document.getElementById('pagination-info').textContent =
+        `显示 ${displayStart} - ${displayEnd} 共 ${total} 条`;
+
+    document.getElementById('page-indicator').textContent = `第 ${currentPage} 页 / 共 ${totalPages} 页`;
+
+    // 更新按钮状态
+    document.getElementById('btn-first').disabled = currentPage === 1;
+    document.getElementById('btn-prev').disabled = currentPage === 1;
+    document.getElementById('btn-next').disabled = currentPage === totalPages;
+    document.getElementById('btn-last').disabled = currentPage === totalPages;
+
+    // 更新全选框状态
+    const selectAll = document.getElementById('select-all');
+    const hasSelectableOnPage = allEdges.length > 0;
+    selectAll.disabled = !hasSelectableOnPage;
+    selectAll.checked = false;
+}
+
+function goToPage(page) {
+    if (page < 1 || page > totalPages) return;
+    currentPage = page;
+    selectedEdges.clear();
+    loadEdges();  // 重新从后端加载数据
+}
+
+function changePageSize() {
+    pageSize = parseInt(document.getElementById('page-size').value);
+    totalPages = Math.ceil(totalEdges / pageSize);
+    currentPage = 1;
+    selectedEdges.clear();
+    loadEdges();  // 重新从后端加载数据
+}
+
+function confirmEdge(edgeId) {
+    fetch("/api/v1/edges/confirm", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({edge_id: edgeId})})
+        .then(response => response.json())
+        .then(data => {
+            if (data.code === 0) {
+                loadEdges();
+            } else {
+                alert('确认失败：' + (data.message || '未知错误'));
+            }
+        })
+        .catch(err => {
+            alert('确认失败：' + err.message);
+        });
+}
+
+function rejectEdge(edgeId) {
+    // 直接加入黑名单，无需弹窗确认
+    fetch("/api/v1/edges/reject", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({edge_id: edgeId})})
+        .then(response => response.json())
+        .then(data => {
+            if (data.code === 0) {
+                loadEdges();
+            } else {
+                alert('拒绝失败：' + (data.message || '未知错误'));
+            }
+        })
+        .catch(err => {
+            alert('拒绝失败：' + err.message);
+        });
+}
+
+function deleteEdge(edgeId) {
+    if (!confirm('确定要删除设备 "' + edgeId + '" 吗？（从数据库中删除）')) {
+        return;
+    }
+    fetch("/api/v1/edges/delete", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({edge_id: edgeId})})
+        .then(response => response.json())
+        .then(data => {
+            if (data.code === 0) {
+                loadEdges();
+            } else {
+                alert('删除失败：' + (data.message || '未知错误'));
+            }
+        })
+        .catch(err => {
+            alert('删除失败：' + err.message);
+        });
+}
+
+function batchConfirm() {
+    const edgeIds = Array.from(selectedEdges);
+    if (edgeIds.length === 0) {
+        alert('请选择要确认的设备');
+        return;
+    }
+    
+    fetch('/api/v1/edges/batch-confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ edge_ids: edgeIds })
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.code === 0) {
+                selectedEdges.clear();
+                loadEdges();
+            } else {
+                alert('批量确认失败：' + (data.message || '未知错误'));
+            }
+        })
+        .catch(err => {
+            alert('批量确认失败：' + err.message);
+        });
+}
+
+function batchReject() {
+    const edgeIds = Array.from(selectedEdges);
+    if (edgeIds.length === 0) {
+        alert('请选择要拒绝的设备');
+        return;
+    }
+    
+    fetch('/api/v1/edges/batch-reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ edge_ids: edgeIds })
+    })
+        .then(response => response.json())
+        .then(data => {
+            if (data.code === 0) {
+                selectedEdges.clear();
+                loadEdges();
+            } else {
+                alert('批量拒绝失败：' + (data.message || '未知错误'));
+            }
+        })
+        .catch(err => {
+            alert('批量拒绝失败：' + err.message);
+        });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatDateTime(isoString) {
+    if (!isoString) return '-';
+    const date = new Date(isoString);
+    return date.toLocaleString('zh-CN', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    });
+}
+
+function formatDuration(seconds) {
+    if (seconds === undefined || seconds === null || seconds <= 0) return '-';
+
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    let result = '';
+    if (hrs > 0) result += hrs + '时 ';
+    if (mins > 0) result += mins + '分 ';
+    if (secs > 0 || result === '') result += secs + '秒';
+
+    return result.trim();
+}
+
+// Auto-refresh control functions
+function toggleAutoRefresh() {
+    const toggle = document.getElementById('auto-refresh-toggle');
+    const status = document.getElementById('auto-refresh-status');
+    
+    autoRefreshEnabled = toggle.checked;
+    
+    if (autoRefreshEnabled) {
+        status.style.color = 'var(--accent-color)';
+        startAutoRefresh();
+    } else {
+        status.style.color = 'var(--on-surface-hint)';
+        stopAutoRefresh();
+    }
+}
+
+function startAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+    autoRefreshInterval = setInterval(() => {
+        if (autoRefreshEnabled) {
+            loadEdges();
+        }
+    }, AUTO_REFRESH_INTERVAL);
+}
+
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+        autoRefreshInterval = null;
+    }
+}
+
+// 页面加载时自动加载数据
+document.addEventListener('DOMContentLoaded', function() {
+    loadEdges();
+    
+    // 启动自动刷新（默认开启）
+    startAutoRefresh();
+});
+</script>
+{% endblock %}
