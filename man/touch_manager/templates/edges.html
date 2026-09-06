@@ -78,7 +78,7 @@
                     <th>设备类型</th>
                     <th>状态</th>
                         <th>确认</th>
-                    <th>Ingress ID</th>
+                    <th>PUB IP</th>
                     <th>链接时长</th>
                         <th style="width: 120px;">操作</th>
                 </tr>
@@ -242,6 +242,13 @@ function renderEdges(edgeList) {
         const isRejected = (confirmed === 0);
         const isSelected = selectedEdges.has(edge.edge_id);
 
+        // 为行添加鼠标悬停事件
+        row.classList.add('edge-row');
+        row.setAttribute('data-edge-data', JSON.stringify(edge));
+        row.addEventListener('mouseenter', showEdgeTooltip);
+        row.addEventListener('mouseleave', hideEdgeTooltip);
+        row.addEventListener('mousemove', moveEdgeTooltip);
+
         row.innerHTML = `
             <td>
                 <input type="checkbox" class="edge-checkbox"
@@ -277,7 +284,7 @@ function renderEdges(edgeList) {
                 </span>
                 `}
             </td>
-            <td>${escapeHtml(edge.ingress_id || '-')}</td>
+            <td>${escapeHtml(edge.public_ip || '-')}</td>
             <td>${edge.status === EDGE_STATUS_ONLINE ? formatDuration(edge.link_duration || 0) : '-'}</td>
             <td>
                 <div style="display: flex; gap: 4px;">
@@ -609,9 +616,165 @@ function stopAutoRefresh() {
 // 页面加载时自动加载数据
 document.addEventListener('DOMContentLoaded', function() {
     loadEdges();
-    
+
     // 启动自动刷新（默认开启）
     startAutoRefresh();
+
+    // 创建 tooltip 元素
+    const tooltip = document.createElement('div');
+    tooltip.className = 'edge-tooltip';
+    tooltip.id = 'edge-tooltip';
+    document.body.appendChild(tooltip);
 });
+
+// Tooltip 相关函数
+let currentTooltipEdge = null;
+let tooltipHideTimeout = null;
+
+function showEdgeTooltip(event) {
+    const row = event.currentTarget;
+    const edgeData = row.getAttribute('data-edge-data');
+    if (!edgeData) return;
+
+    const edge = JSON.parse(edgeData);
+    currentTooltipEdge = edge;
+
+    // 清除之前的隐藏定时器
+    if (tooltipHideTimeout) {
+        clearTimeout(tooltipHideTimeout);
+        tooltipHideTimeout = null;
+    }
+
+    const tooltip = document.getElementById('edge-tooltip');
+    if (!tooltip) return;
+
+    // 构建 tooltip 内容
+    const statusText = edge.status === EDGE_STATUS_ONLINE ? '在线' : '离线';
+    const statusIcon = edge.status === EDGE_STATUS_ONLINE ? 'check_circle' : 'cancel';
+    const statusColor = edge.status === EDGE_STATUS_ONLINE ? 'var(--accent-color)' : 'var(--error-color)';
+
+    let confirmedText = '待确认';
+    let confirmedIcon = 'pending';
+    let confirmedColor = 'var(--warning-color)';
+    if (edge.confirmed === 1) {
+        confirmedText = '已确认';
+        confirmedIcon = 'check_circle';
+        confirmedColor = 'var(--accent-color)';
+    } else if (edge.confirmed === 0) {
+        confirmedText = '黑名单';
+        confirmedIcon = 'block';
+        confirmedColor = 'var(--error-color)';
+    }
+
+    const linkDuration = edge.status === EDGE_STATUS_ONLINE ? formatDuration(edge.link_duration || 0) : '-';
+
+    tooltip.innerHTML = `
+        <div class="tooltip-header">
+            <span class="material-icons">info</span>
+            <span>设备详情</span>
+        </div>
+        <div class="tooltip-row">
+            <span class="tooltip-label">设备 ID:</span>
+            <span class="tooltip-value">${escapeHtml(edge.edge_id || '-')}</span>
+        </div>
+        <div class="tooltip-divider"></div>
+        <div class="tooltip-row">
+            <span class="tooltip-label">设备类型:</span>
+            <span class="tooltip-value">${escapeHtml(edge.edge_type || '-')}</span>
+        </div>
+        <div class="tooltip-row">
+            <span class="tooltip-label">状态:</span>
+            <span class="tooltip-value" style="color: ${statusColor}; display: inline-flex; align-items: center; gap: 4px;">
+                <span class="material-icons" style="font-size: 16px;">${statusIcon}</span>
+                ${statusText}
+            </span>
+        </div>
+        <div class="tooltip-row">
+            <span class="tooltip-label">确认状态:</span>
+            <span class="tooltip-value" style="color: ${confirmedColor}; display: inline-flex; align-items: center; gap: 4px;">
+                <span class="material-icons" style="font-size: 16px;">${confirmedIcon}</span>
+                ${confirmedText}
+            </span>
+        </div>
+        <div class="tooltip-divider"></div>
+        <div class="tooltip-row">
+            <span class="tooltip-label">公网 IP:</span>
+            <span class="tooltip-value">${escapeHtml(edge.public_ip || '-')}</span>
+        </div>
+        <div class="tooltip-row">
+            <span class="tooltip-label">本地 IP:</span>
+            <span class="tooltip-value">${escapeHtml(edge.local_ip || '-')}</span>
+        </div>
+        <div class="tooltip-row">
+            <span class="tooltip-label">Ingress:</span>
+            <span class="tooltip-value">${escapeHtml(edge.ingress_id || '-')}</span>
+        </div>
+        <div class="tooltip-divider"></div>
+        <div class="tooltip-row">
+            <span class="tooltip-label">链接时长:</span>
+            <span class="tooltip-value">${linkDuration}</span>
+        </div>
+        <div class="tooltip-row">
+            <span class="tooltip-label">最后上线:</span>
+            <span class="tooltip-value">${edge.last_online_time ? formatDateTime(edge.last_online_time) : '-'}</span>
+        </div>
+        <div class="tooltip-row">
+            <span class="tooltip-label">最后离线:</span>
+            <span class="tooltip-value">${edge.last_offline_time ? formatDateTime(edge.last_offline_time) : '-'}</span>
+        </div>
+    `;
+
+    // 定位 tooltip
+    const rect = row.getBoundingClientRect();
+    const tooltipWidth = 380;
+    const tooltipHeight = 350;
+
+    let left = rect.right + 10;
+    let top = rect.top;
+
+    // 如果右侧超出屏幕，显示在左侧
+    if (left + tooltipWidth > window.innerWidth) {
+        left = rect.left - tooltipWidth - 10;
+    }
+
+    // 如果底部超出屏幕，向上调整
+    if (top + tooltipHeight > window.innerHeight) {
+        top = window.innerHeight - tooltipHeight - 20;
+    }
+
+    // 确保不超出顶部
+    if (top < 10) {
+        top = 10;
+    }
+
+    // 确保不超出左侧
+    if (left < 10) {
+        left = 10;
+    }
+
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+
+    // 显示 tooltip
+    requestAnimationFrame(() => {
+        tooltip.classList.add('show');
+    });
+}
+
+function hideEdgeTooltip(event) {
+    const tooltip = document.getElementById('edge-tooltip');
+    if (!tooltip) return;
+
+    // 延迟隐藏，避免鼠标移到 tooltip 上时闪烁
+    tooltipHideTimeout = setTimeout(() => {
+        tooltip.classList.remove('show');
+        currentTooltipEdge = null;
+    }, 100);
+}
+
+function moveEdgeTooltip(event) {
+    // 可选：鼠标移动时更新 tooltip 位置
+    // 当前实现中，tooltip 固定在行的右侧，不需要跟随鼠标
+}
 </script>
 {% endblock %}

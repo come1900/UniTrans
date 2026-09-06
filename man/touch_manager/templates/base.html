@@ -550,6 +550,71 @@
         .refreshing .spinner {
             animation: rotating 1s linear infinite;
         }
+
+        /* Tooltip (冒泡提示) */
+        .edge-tooltip {
+            position: fixed;
+            background: var(--surface-color);
+            border: 1px solid var(--divider-color);
+            border-radius: 8px;
+            box-shadow: var(--elevation-3);
+            padding: 16px;
+            min-width: 320px;
+            max-width: 450px;
+            z-index: 10000;
+            pointer-events: none;
+            opacity: 0;
+            transform: translateY(8px);
+            transition: opacity 0.2s ease, transform 0.2s ease;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .edge-tooltip.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .edge-tooltip .tooltip-header {
+            font-weight: 500;
+            font-size: 14px;
+            color: var(--primary-color);
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--divider-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .edge-tooltip .tooltip-header .material-icons {
+            font-size: 18px;
+        }
+
+        .edge-tooltip .tooltip-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 6px;
+        }
+
+        .edge-tooltip .tooltip-label {
+            color: var(--on-surface-hint);
+            font-weight: 400;
+            min-width: 100px;
+        }
+
+        .edge-tooltip .tooltip-value {
+            color: var(--on-surface);
+            font-weight: 500;
+            text-align: right;
+            word-break: break-word;
+        }
+
+        .edge-tooltip .tooltip-divider {
+            height: 1px;
+            background: var(--divider-color);
+            margin: 8px 0;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>

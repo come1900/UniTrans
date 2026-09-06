@@ -750,11 +750,13 @@ void CFunRegisterSvr::notify_device_online(const std::string& edge_id)
         return;
     }
 
-    // 获取 Edge 的公网 IP
+    // 获取 Edge 的设备信息和公网 IP
     std::string edge_public_ip;
+    std::string edge_type;
     for (auto it = m_online_edges.begin(); it != m_online_edges.end(); ++it) {
         if (it->second.edge_id == edge_id) {
             edge_public_ip = it->second.public_ip;
+            edge_type = it->second.edge_type;
             break;
         }
     }
@@ -762,6 +764,7 @@ void CFunRegisterSvr::notify_device_online(const std::string& edge_id)
     // 使用 come.1 库的消息类型
     IngressEdgeOnline msg;
     msg.edge_id = edge_id;
+    msg.edge_type = edge_type;
     msg.ingress_id = "";  // TODO: 获取实际的 ingress_id
     msg.public_ip = edge_public_ip;
     msg.online_since = time(NULL);
@@ -773,8 +776,8 @@ void CFunRegisterSvr::notify_device_online(const std::string& edge_id)
     std::string req_json = ComeJsonCodec::encodeJsonRpcRequest(msg, COME_METHOD_INGRESS_EDGE_ONLINE, req_id);
     if (!req_json.empty()) {
         g_DevWsRegisterSvr.SendText(m_manager_client_id, req_json.c_str(), req_json.length());
-        ez_printf_debug("touch_ingress: [NOTIFY.ONLINE] Sent to manager [edge_id=%s, req_id=%d, manager_client_id=%d]\n",
-               edge_id.c_str(), req_id, m_manager_client_id);
+        ez_printf_debug("touch_ingress: [NOTIFY.ONLINE] Sent to manager [edge_id=%s, edge_type=%s, req_id=%d, manager_client_id=%d]\n",
+               edge_id.c_str(), edge_type.c_str(), req_id, m_manager_client_id);
     }
 }
 
