@@ -5,6 +5,7 @@
 #include <iostream>
 #include <limits>
 #include <type_traits>
+#include <set>
 
 // 使用类型别名
 using json = ::nlohmann::json;
@@ -546,6 +547,430 @@ bool ComeJsonCodec::decode(const std::string& jsonStr, AckConfigUpdate& msg) {
 }
 
 // ==============================
+// ==============================
+// CEndpoint 编解码（嵌套结构）
+// ==============================
+
+void to_json(json& j, const CEndpoint& ep) {
+    j = json{
+        {"host", ep.host},
+        {"port", ep.port}
+    };
+}
+
+void from_json(const json& j, CEndpoint& ep) {
+    ep.host = get_field_value<std::string>(j, "host", "");
+    ep.port = get_field_value<int32_t>(j, "port", 0);
+}
+
+// ==============================
+// CSecurity 编解码（嵌套结构）
+// ==============================
+
+void to_json(json& j, const CSecurity& sec) {
+    j = json{
+        {"authMethod", sec.authMethod},
+        {"credential", sec.credential},
+        {"enableTls", sec.enableTls}
+    };
+}
+
+void from_json(const json& j, CSecurity& sec) {
+    sec.authMethod = get_field_value<std::string>(j, "authMethod", "");
+    sec.credential = get_field_value<std::string>(j, "credential", "");
+    sec.enableTls = get_field_value<bool>(j, "enableTls", false);
+}
+
+// ==============================
+// CLocalManagement 编解码（嵌套结构）
+// ==============================
+
+void to_json(json& j, const CLocalManagement& lm) {
+    j = json{
+        {"bindAddress", lm.bindAddress},
+        {"bindPort", lm.bindPort}
+    };
+}
+
+void from_json(const json& j, CLocalManagement& lm) {
+    lm.bindAddress = get_field_value<std::string>(j, "bindAddress", "");
+    lm.bindPort = get_field_value<int32_t>(j, "bindPort", 0);
+}
+
+// ==============================
+// CTargetService 编解码（嵌套结构）
+// ==============================
+
+void to_json(json& j, const CTargetService& ts) {
+    j = json{
+        {"ip", ts.ip},
+        {"port", ts.port}
+    };
+}
+
+void from_json(const json& j, CTargetService& ts) {
+    ts.ip = get_field_value<std::string>(j, "ip", "");
+    ts.port = get_field_value<int32_t>(j, "port", 0);
+}
+
+// ==============================
+// CAccessPolicy 编解码（嵌套结构 - 使用嵌套对象）
+// ==============================
+
+void to_json(json& j, const CAccessPolicy& policy) {
+    j = json{
+        {"policyId", policy.policyId},
+        {"protocol", policy.protocol},
+        {"targetService", policy.targetService},
+        {"exposedPort", policy.exposedPort},
+        {"description", policy.description}
+    };
+}
+
+void from_json(const json& j, CAccessPolicy& policy) {
+    policy.policyId = get_field_value<std::string>(j, "policyId", "");
+    policy.protocol = get_field_value<std::string>(j, "protocol", "");
+    if (j.contains("targetService") && j["targetService"].is_object()) {
+        from_json(j["targetService"], policy.targetService);
+    }
+    policy.exposedPort = get_field_value<int32_t>(j, "exposedPort", 0);
+    policy.description = get_field_value<std::string>(j, "description", "");
+}
+
+// ==============================
+// CtunnelServiceCfg 编解码（嵌套结构 - 使用嵌套对象）
+// ==============================
+
+void to_json(json& j, const CtunnelServiceCfg& cfg) {
+    j = json{
+        {"version", cfg.version},
+        {"endpoint", cfg.endpoint},
+        {"security", cfg.security},
+        {"localManagement", cfg.localManagement}
+    };
+}
+
+void from_json(const json& j, CtunnelServiceCfg& cfg) {
+    cfg.version = get_field_value<std::string>(j, "version", "");
+    if (j.contains("endpoint") && j["endpoint"].is_object()) {
+        from_json(j["endpoint"], cfg.endpoint);
+    }
+    if (j.contains("security") && j["security"].is_object()) {
+        from_json(j["security"], cfg.security);
+    }
+    if (j.contains("localManagement") && j["localManagement"].is_object()) {
+        from_json(j["localManagement"], cfg.localManagement);
+    }
+}
+
+// ==============================
+// CServiceConfig 编解码（嵌套结构 - config_content 数组中的元素）
+// 每个配置项：{ "tunnelService": {...}, "accessPolicies": [...] }
+// ==============================
+
+void to_json(json& j, const CServiceConfig& svc) {
+    // 将 serviceName 作为 key，tunnelService 作为值
+    j[svc.serviceName] = svc.tunnelService;
+    // accessPolicies 作为同级的数组字段
+    j["accessPolicies"] = svc.accessPolicies;
+}
+
+void from_json(const json& j, CServiceConfig& svc) {
+    svc.accessPolicies.clear();
+    
+    // 解析 accessPolicies 数组
+    if (j.contains("accessPolicies") && j["accessPolicies"].is_array()) {
+        svc.accessPolicies.clear();
+        for (size_t i = 0; i < j["accessPolicies"].size(); ++i) {
+            try {
+                CAccessPolicy policy;
+                from_json(j["accessPolicies"][i], policy);
+                svc.accessPolicies.push_back(policy);
+            } catch (...) {
+                // 忽略解析失败的策略
+            }
+        }
+    }
+    
+    // 解析 tunnelService 配置（查找除 accessPolicies 外的对象字段）
+    for (json::const_iterator it = j.begin(); it != j.end(); ++it) {
+        const std::string& key = it.key();
+        const json& value = it.value();
+        if (key != "accessPolicies" && value.is_object()) {
+            // 假设其他对象字段都是隧道服务配置
+            try {
+                CtunnelServiceCfg cfg;
+                from_json(value, cfg);
+                svc.tunnelService = cfg;
+                svc.serviceName = key;
+            } catch (...) {
+                // 忽略解析失败的配置
+            }
+        }
+    }
+}
+
+// ==============================
+// CConfigContent 编解码（嵌套结构 - config_content 字段是数组）
+// ==============================
+
+void to_json(json& j, const CConfigContent& content) {
+    // services 序列化为数组
+    j = content.services;
+}
+
+void from_json(const json& j, CConfigContent& content) {
+    content.services.clear();
+    
+    // 解析 services 数组
+    if (j.is_array()) {
+        for (size_t i = 0; i < j.size(); ++i) {
+            try {
+                CServiceConfig svc;
+                from_json(j[i], svc);
+                content.services.push_back(svc);
+            } catch (...) {
+                // 忽略解析失败的服务配置
+            }
+        }
+    }
+}
+
+// ==============================
+// FrpcProxy 编解码（frpc 代理配置）
+// ==============================
+
+void to_json(json& j, const FrpcProxy& proxy) {
+    j = json{
+        {"name", proxy.name},
+        {"type", proxy.type},
+        {"localIP", proxy.localIP},
+        {"localPort", proxy.localPort},
+        {"remotePort", proxy.remotePort}
+    };
+}
+
+void from_json(const json& j, FrpcProxy& proxy) {
+    proxy.name = get_field_value<std::string>(j, "name", "");
+    proxy.type = get_field_value<std::string>(j, "type", "");
+    proxy.localIP = get_field_value<std::string>(j, "localIP", "");
+    proxy.localPort = get_field_value<int32_t>(j, "localPort", 0);
+    proxy.remotePort = get_field_value<int32_t>(j, "remotePort", 0);
+}
+
+// ==============================
+// FrpcConfig 编解码（扁平结构，输出嵌套 JSON）
+// ==============================
+
+void to_json(json& j, const FrpcConfig& cfg) {
+    j = json{
+        {"serverAddr", cfg.serverAddr},
+        {"serverPort", cfg.serverPort},
+        {"auth", {
+            {"method", cfg.authMethod},
+            {"token", cfg.token}
+        }},
+        {"transport", {
+            {"tls", {
+                {"enable", cfg.tlsEnable}
+            }}
+        }},
+        {"webServer", {
+            {"addr", cfg.webServerAddr},
+            {"port", cfg.webServerPort}
+        }},
+        {"proxies", cfg.proxies}
+    };
+}
+
+void from_json(const json& j, FrpcConfig& cfg) {
+    cfg.serverAddr = get_field_value<std::string>(j, "serverAddr", "");
+    cfg.serverPort = get_field_value<int32_t>(j, "serverPort", 0);
+    if (j.contains("auth") && j["auth"].is_object()) {
+        cfg.authMethod = get_field_value<std::string>(j["auth"], "method", "");
+        cfg.token = get_field_value<std::string>(j["auth"], "token", "");
+    }
+    if (j.contains("transport") && j["transport"].is_object()) {
+        if (j["transport"].contains("tls") && j["transport"]["tls"].is_object()) {
+            cfg.tlsEnable = get_field_value<bool>(j["transport"]["tls"], "enable", false);
+        }
+    }
+    if (j.contains("webServer") && j["webServer"].is_object()) {
+        cfg.webServerAddr = get_field_value<std::string>(j["webServer"], "addr", "");
+        cfg.webServerPort = get_field_value<int32_t>(j["webServer"], "port", 0);
+    }
+    if (j.contains("proxies") && j["proxies"].is_array()) {
+        cfg.proxies.clear();
+        for (size_t i = 0; i < j["proxies"].size(); ++i) {
+            try {
+                FrpcProxy proxy;
+                from_json(j["proxies"][i], proxy);
+                cfg.proxies.push_back(proxy);
+            } catch (...) {
+                // 忽略解析失败的代理
+            }
+        }
+    }
+}
+
+// ==============================
+// ConfigUpdate_tunnelService 编解码
+// ==============================
+
+void to_json(json& j, const ConfigUpdate_tunnelService& msg) {
+    // 基类字段
+    j["edge_id"] = msg.edge_id;
+    j["config_type"] = msg.config_type;
+    j["version"] = msg.version;
+    j["access_token"] = msg.access_token;
+    
+    // config_content 字段：嵌套的配置内容
+    j["config_content"] = msg.configContent;
+}
+
+void from_json(const json& j, ConfigUpdate_tunnelService& msg) {
+    // 基类字段
+    msg.edge_id = get_field_value<std::string>(j, "edge_id", "");
+    msg.config_type = get_field_value<std::string>(j, "config_type", "");
+    msg.version = get_field_value<int32_t>(j, "version", 0);
+    msg.access_token = get_field_value<std::string>(j, "access_token", "");
+
+    // config_content 字段：数组形式的配置内容
+    if (j.contains("config_content") && j["config_content"].is_array()) {
+        from_json(j["config_content"], msg.configContent);
+    }
+}
+
+std::string ComeJsonCodec::encode(const ConfigUpdate_tunnelService& msg) {
+    try {
+        json j;
+        to_json(j, msg);
+        return j.dump();
+    } catch (...) {
+        return std::string();
+    }
+}
+
+bool ComeJsonCodec::decode(const std::string& jsonStr, ConfigUpdate_tunnelService& msg) {
+    try {
+        json j = json::parse(jsonStr);
+        from_json(j, msg);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+// ==============================
+// FrpcConfig 编解码接口实现
+// ==============================
+
+std::string ComeJsonCodec::encode(const FrpcConfig& frpcCfg) {
+    try {
+        json j;
+        to_json(j, frpcCfg);
+        return j.dump();
+    } catch (...) {
+        return std::string();
+    }
+}
+
+bool ComeJsonCodec::decode(const std::string& jsonStr, FrpcConfig& frpcCfg) {
+    try {
+        json j = json::parse(jsonStr);
+        from_json(j, frpcCfg);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+// ==============================
+// ConfigUpdate_tunnelService <-> FrpcConfig 互转接口实现
+// ==============================
+
+bool ComeJsonCodec::toFrpcConfig(const ConfigUpdate_tunnelService& msg, FrpcConfig& frpcCfg) {
+    // 检查是否有至少一个服务配置
+    if (msg.configContent.services.empty()) {
+        return false;
+    }
+
+    // 只处理第一个服务配置
+    const CServiceConfig& svc = msg.configContent.services[0];
+
+    // 转换隧道服务配置为 frpc 格式（扁平结构）
+    frpcCfg.serverAddr = svc.tunnelService.endpoint.host;
+    frpcCfg.serverPort = svc.tunnelService.endpoint.port;
+    frpcCfg.authMethod = svc.tunnelService.security.authMethod;
+    frpcCfg.token = svc.tunnelService.security.credential;
+    frpcCfg.tlsEnable = svc.tunnelService.security.enableTls;
+    frpcCfg.webServerAddr = svc.tunnelService.localManagement.bindAddress;
+    frpcCfg.webServerPort = svc.tunnelService.localManagement.bindPort;
+
+    // 转换 accessPolicies 为 proxies
+    frpcCfg.proxies.clear();
+    for (size_t i = 0; i < svc.accessPolicies.size(); ++i) {
+        const CAccessPolicy& policy = svc.accessPolicies[i];
+        FrpcProxy proxy;
+        proxy.name = policy.policyId;
+        proxy.type = policy.protocol;
+        proxy.localIP = policy.targetService.ip;
+        proxy.localPort = policy.targetService.port;
+        proxy.remotePort = policy.exposedPort;
+        frpcCfg.proxies.push_back(proxy);
+    }
+
+    return true;
+}
+
+bool ComeJsonCodec::fromFrpcConfig(const FrpcConfig& frpcCfg, const std::string& edge_id,
+                                   int32_t version, const std::string& access_token,
+                                   ConfigUpdate_tunnelService& msg) {
+    // 设置基类字段
+    msg.edge_id = edge_id;
+    msg.config_type = "tunnelService";
+    msg.version = version;
+    msg.access_token = access_token;
+
+    // 清空并创建配置内容
+    msg.configContent.services.clear();
+
+    // 创建 CServiceConfig
+    CServiceConfig svc;
+    svc.serviceName = "tunnelService";
+
+    // 转换 frpc 服务器配置为隧道服务端点
+    svc.tunnelService.version = std::to_string(version);
+    svc.tunnelService.endpoint.host = frpcCfg.serverAddr;
+    svc.tunnelService.endpoint.port = frpcCfg.serverPort;
+
+    // 转换 frpc 认证配置为安全配置
+    svc.tunnelService.security.authMethod = frpcCfg.authMethod;
+    svc.tunnelService.security.credential = frpcCfg.token;
+    svc.tunnelService.security.enableTls = frpcCfg.tlsEnable;
+
+    // 转换 frpc webServer 为本地管理配置
+    svc.tunnelService.localManagement.bindAddress = frpcCfg.webServerAddr;
+    svc.tunnelService.localManagement.bindPort = frpcCfg.webServerPort;
+
+    // 转换 frpc proxies 为 accessPolicies
+    svc.accessPolicies.clear();
+    for (size_t i = 0; i < frpcCfg.proxies.size(); ++i) {
+        const FrpcProxy& proxy = frpcCfg.proxies[i];
+        CAccessPolicy policy;
+        policy.policyId = proxy.name;
+        policy.protocol = proxy.type;
+        policy.targetService.ip = proxy.localIP;
+        policy.targetService.port = proxy.localPort;
+        policy.exposedPort = proxy.remotePort;
+        policy.description = "";
+        svc.accessPolicies.push_back(policy);
+    }
+
+    msg.configContent.services.push_back(svc);
+    return true;
+}
+
 // IngressLoadReport 编解码
 // ==============================
 

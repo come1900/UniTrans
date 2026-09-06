@@ -223,6 +223,153 @@ public:
 };
 
 // ==============================
+// TunnelService 配置相关结构（嵌套在 config_content 中）
+// ==============================
+
+// 端点配置（嵌套在 tunnelService 中）
+struct CEndpoint {
+    std::string host;           // 主机地址
+    int32_t port;               // 端口号
+
+    CEndpoint() : port(0) {}
+    CEndpoint(const std::string& _host, int32_t _port)
+        : host(_host), port(_port) {}
+};
+
+// 安全配置（嵌套在 tunnelService 中）
+struct CSecurity {
+    std::string authMethod;     // 认证方法（如 "token"）
+    std::string credential;     // 认证凭证
+    bool enableTls;             // 是否启用 TLS
+
+    CSecurity() : enableTls(false) {}
+    CSecurity(const std::string& _authMethod, const std::string& _credential, bool _enableTls)
+        : authMethod(_authMethod), credential(_credential), enableTls(_enableTls) {}
+};
+
+// 本地管理配置（嵌套在 tunnelService 中）
+struct CLocalManagement {
+    std::string bindAddress;    // 本地管理绑定地址
+    int32_t bindPort;           // 本地管理绑定端口
+
+    CLocalManagement() : bindPort(0) {}
+    CLocalManagement(const std::string& _bindAddr, int32_t _bindPort)
+        : bindAddress(_bindAddr), bindPort(_bindPort) {}
+};
+
+// 目标服务配置（嵌套在 accessPolicies 中）
+struct CTargetService {
+    std::string ip;             // 目标服务 IP
+    int32_t port;               // 目标服务端口
+
+    CTargetService() : port(0) {}
+    CTargetService(const std::string& _ip, int32_t _port)
+        : ip(_ip), port(_port) {}
+};
+
+// 单个访问策略
+struct CAccessPolicy {
+    std::string policyId;       // 策略 ID
+    std::string protocol;       // 协议（如 "tcp", "udp"）
+    CTargetService targetService;  // 目标服务配置：{ip, port}
+    int32_t exposedPort;        // 暴露的端口
+    std::string description;    // 策略描述
+
+    CAccessPolicy() : exposedPort(0) {}
+    CAccessPolicy(const std::string& _policyId, const std::string& _protocol,
+                  const CTargetService& _ts, int32_t _exposedPort, const std::string& _desc = "")
+        : policyId(_policyId), protocol(_protocol), targetService(_ts),
+          exposedPort(_exposedPort), description(_desc) {}
+};
+
+// 隧道服务配置（使用嵌套对象结构）
+struct CtunnelServiceCfg {
+    std::string version;        // 配置版本号（如 "1.0"）
+    CEndpoint endpoint;         // 端点配置：{host, port}
+    CSecurity security;         // 安全配置：{authMethod, credential, enableTls}
+    CLocalManagement localManagement;  // 本地管理配置：{bindAddress, bindPort}
+
+    CtunnelServiceCfg() = default;
+    CtunnelServiceCfg(const std::string& _ver, const CEndpoint& _ep,
+                      const CSecurity& _sec, const CLocalManagement& _lm)
+        : version(_ver), endpoint(_ep), security(_sec), localManagement(_lm) {}
+};
+
+// 单个服务配置项（用于 config_content 数组中的元素）
+// 每个配置项包含：一个隧道服务配置（带名称）和它的 accessPolicies 数组
+struct CServiceConfig {
+    std::string serviceName;          // 服务名称（如 "tunnelService", "tunnelService2"）
+    CtunnelServiceCfg tunnelService;  // 隧道服务配置
+    std::vector<CAccessPolicy> accessPolicies;  // 该服务的访问策略数组
+
+    CServiceConfig() = default;
+    CServiceConfig(const std::string& _name, const CtunnelServiceCfg& _ts,
+                   const std::vector<CAccessPolicy>& _ap)
+        : serviceName(_name), tunnelService(_ts), accessPolicies(_ap) {}
+};
+
+// 配置内容（嵌套在 config_content 字段中）
+// config_content 是数组，包含多个并列的服务配置项
+struct CConfigContent {
+    std::vector<CServiceConfig> services;  // 多个并列的服务配置项
+
+    CConfigContent() = default;
+    CConfigContent(const std::vector<CServiceConfig>& _sv)
+        : services(_sv) {}
+};
+
+// ==============================
+// ConfigUpdate_tunnelService - 隧道服务配置更新消息
+// ==============================
+
+class ConfigUpdate_tunnelService : public ConfigUpdate {
+public:
+    CConfigContent configContent;   // 配置内容（支持多个隧道服务和访问策略数组）
+
+    ConfigUpdate_tunnelService() : ConfigUpdate() {}
+    ConfigUpdate_tunnelService(const std::string& _edge_id, const CConfigContent& _content,
+                               int32_t _version = 0, const std::string& _access_token = "")
+        : ConfigUpdate(_edge_id, "tunnelService", "", _version, _access_token),
+          configContent(_content) {}
+};
+
+// ==============================
+// FrpcConfig - frpc 配置结构（嵌套对象设计）
+// ==============================
+
+// frpc 代理配置
+struct FrpcProxy {
+    std::string name;       // 代理名称
+    std::string type;       // 代理类型（如 "tcp", "udp", "http", "https"）
+    std::string localIP;    // 本地 IP
+    int32_t localPort;      // 本地端口
+    int32_t remotePort;     // 远程端口
+
+    FrpcProxy() : localPort(0), remotePort(0) {}
+    FrpcProxy(const std::string& _name, const std::string& _type,
+              const std::string& _localIP, int32_t _localPort, int32_t _remotePort)
+        : name(_name), type(_type), localIP(_localIP),
+          localPort(_localPort), remotePort(_remotePort) {}
+};
+
+// frpc 配置（扁平结构）
+struct FrpcConfig {
+    std::string serverAddr;     // 服务器地址
+    int32_t serverPort;         // 服务器端口
+    std::string authMethod;     // 认证方法（如 "token"）
+    std::string token;          // 认证令牌
+    bool tlsEnable;             // 是否启用 TLS
+    std::string webServerAddr;  // Web 服务器地址
+    int32_t webServerPort;      // Web 服务器端口
+    std::vector<FrpcProxy> proxies;  // 代理列表
+
+    FrpcConfig() : serverPort(0), authMethod(), token(), tlsEnable(false),
+                   webServerAddr(), webServerPort(0) {}
+};
+
+// AckConfigUpdate_tunnelService 复用 AckConfigUpdate 即可
+
+// ==============================
 // Ingress 负载状态上报（Manager ↔ Ingress）
 // ==============================
 

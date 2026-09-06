@@ -161,6 +161,7 @@ public:
     static std::string encode(const AckEdgeHeartbeat& msg);
     static std::string encode(const ConfigUpdate& msg);
     static std::string encode(const AckConfigUpdate& msg);
+    static std::string encode(const ConfigUpdate_tunnelService& msg);
     static std::string encode(const IngressLoadReport& msg);
     static std::string encode(const AckIngressLoadReport& msg);
     static std::string encode(const ManagerCommand& msg);
@@ -190,6 +191,7 @@ public:
     static bool decode(const std::string& jsonStr, AckEdgeHeartbeat& msg);
     static bool decode(const std::string& jsonStr, ConfigUpdate& msg);
     static bool decode(const std::string& jsonStr, AckConfigUpdate& msg);
+    static bool decode(const std::string& jsonStr, ConfigUpdate_tunnelService& msg);
     static bool decode(const std::string& jsonStr, IngressLoadReport& msg);
     static bool decode(const std::string& jsonStr, AckIngressLoadReport& msg);
     static bool decode(const std::string& jsonStr, ManagerCommand& msg);
@@ -299,6 +301,29 @@ public:
 
     // 直接从 JSON 字符串解析为消息对象 + method（通知格式，无 id）
     static bool decodeJsonRpcNotification(const std::string& jsonStr, EdgeHeartbeat& msg, std::string& method, int64_t& id);
+
+    // ==============================
+    // FrpcConfig 编解码接口
+    // ==============================
+
+    // FrpcConfig 编码
+    static std::string encode(const FrpcConfig& frpcCfg);
+
+    // FrpcConfig 解码
+    static bool decode(const std::string& jsonStr, FrpcConfig& frpcCfg);
+
+    // ==============================
+    // ConfigUpdate_tunnelService <-> FrpcConfig 互转接口
+    // ==============================
+
+    // 将 ConfigUpdate_tunnelService 转换为 FrpcConfig（只处理第一个服务配置）
+    static bool toFrpcConfig(const ConfigUpdate_tunnelService& msg, FrpcConfig& frpcCfg);
+
+    // 将 FrpcConfig 转换为 ConfigUpdate_tunnelService
+    // 注意：需要指定 edge_id 和 version 等信息
+    static bool fromFrpcConfig(const FrpcConfig& frpcCfg, const std::string& edge_id,
+                               int32_t version, const std::string& access_token,
+                               ConfigUpdate_tunnelService& msg);
 };
 
 #endif // COME_1_JSON_H

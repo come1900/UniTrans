@@ -40,3 +40,38 @@
   - 主要功能：对数据进行json封装和解封装
   - 编译参数：`-I${HOME}/libs/json-hpp`
   - 链接参数：无
+
+## 协议层与实现分离原则
+
+**核心思想**：对外协议不绑定具体实现，通过转换接口实现可插拔的内部配置格式。
+
+**分层设计**：
+1. **对外统一协议层**（稳定不变）
+   - 使用 `ConfigUpdate_tunnelService` 作为标准透传隧道配置协议
+   - 所有外部交互（JSON-RPC 消息）都使用此格式
+   - 不暴露任何具体透传软件的细节
+
+2. **内部转换层**（可扩展）
+   - 提供 `toFrpcConfig()` 和 `fromFrpcConfig()` 双向转换接口
+   - 将统一的 tunnelService 转换为具体软件的配置格式
+   - 将来支持其他软件时，只需添加类似的转换接口
+
+3. **具体实现配置层**（可替换）
+   - `FrpcConfig` 专门用于 frpc 配置文件格式
+   - 内部存储采用扁平结构，JSON 输出采用嵌套格式
+   - 完全独立于对外协议
+
+**扩展示例**（支持 ngrok 时）：
+```cpp
+// 新增 ngrok 配置结构
+struct NgrokConfig { ... };
+
+// 新增转换接口（保持对外协议不变）
+static bool toNgrokConfig(const ConfigUpdate_tunnelService& msg, NgrokConfig& ngrokCfg);
+static bool fromNgrokConfig(const NgrokConfig& ngrokCfg, ..., ConfigUpdate_tunnelService& msg);
+```
+
+**优势**：
+- 外部调用者无需关心使用哪种透传软件
+- 更换或新增透传软件时，对外接口保持不变
+- 符合开闭原则：对扩展开放，对修改关闭
