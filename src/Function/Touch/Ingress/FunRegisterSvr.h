@@ -140,6 +140,11 @@ private:
     // JSON-RPC 2.0 通知处理（直接使用消息结构体）
     void handle_device_heartbeat_jsonrpc2(int client_id, const EdgeHeartbeat& msg);
 
+    // frpc 远程配置透传处理（第一阶段实现）
+    void handle_config_update_jsonrpc2(int client_id, const std::string& json_str, int64_t id);
+    void handle_config_query_jsonrpc2(int client_id, const std::string& json_str, int64_t id);
+    void handle_config_ack_jsonrpc2(int client_id, const std::string& json_str);
+
     // 通知 manager 设备上线/下线（ingress 是业务纽带，负责通知 manager）
     void notify_device_online(const std::string& edge_id);
     void notify_device_offline(const std::string& edge_id);

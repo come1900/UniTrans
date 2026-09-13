@@ -1,0 +1,792 @@
+{% extends "base.html" %}
+
+{% block title %}Edge 配置 - Touch Manager{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ---- Edge 配置编辑页 (第三阶段 frpc 远程配置界面) ---- */
+    .config-page-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 16px;
+        margin-bottom: 8px;
+    }
+    .config-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 20px;
+        font-weight: 500;
+        letter-spacing: 0.15px;
+    }
+    .config-title .material-icons { color: var(--primary-color); font-size: 24px; }
+    .config-actions { display: flex; gap: 8px; }
+    .config-actions .btn .material-icons { font-size: 18px; }
+
+    .config-section {
+        background: var(--surface-color);
+        border-radius: 8px;
+        box-shadow: var(--elevation-1);
+        padding: 20px 24px;
+        margin-bottom: 20px;
+    }
+    .config-section h3 {
+        font-size: 15px;
+        font-weight: 500;
+        letter-spacing: 0.25px;
+        color: var(--on-surface);
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 16px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--divider-color);
+    }
+    .config-section h3 .material-icons { color: var(--primary-color); font-size: 20px; }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 16px 24px;
+    }
+    .form-field { display: flex; flex-direction: column; gap: 6px; }
+    .form-field label {
+        font-size: 12px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--on-surface-secondary);
+    }
+    .form-field input[type="text"],
+    .form-field input[type="number"],
+    .form-field input[type="password"],
+    .form-field select {
+        padding: 10px 12px;
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
+        font-size: 14px;
+        color: var(--on-surface);
+        background: #fff;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        width: 100%;
+    }
+    .form-field input:focus,
+    .form-field select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 2px var(--primary-light);
+    }
+    .form-field .hint { font-size: 11px; color: var(--on-surface-hint); text-transform: none; letter-spacing: 0.2px; }
+
+    .form-check {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .form-check input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        accent-color: var(--primary-color);
+        cursor: pointer;
+    }
+    .form-check span { font-size: 14px; color: var(--on-surface); }
+
+    /* 访问策略(代理)表格 */
+    .proxy-toolbar {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 12px;
+    }
+    .proxy-grid {
+        display: grid;
+        grid-template-columns: minmax(120px, 1.4fr) 110px 130px 120px 120px 120px 70px;
+        gap: 8px;
+        align-items: center;
+        margin-bottom: 8px;
+        padding: 8px;
+        border: 1px solid var(--divider-color);
+        border-radius: 8px;
+        background: #fff;
+    }
+    .proxy-grid-header {
+        border: none;
+        background: var(--primary-light);
+        padding: 8px 12px;
+        font-size: 12px;
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--on-surface);
+    }
+    .proxy-grid input[type="text"],
+    .proxy-grid input[type="number"],
+    .proxy-grid select {
+        padding: 8px 10px;
+        border: 1px solid var(--divider-color);
+        border-radius: 4px;
+        font-size: 13px;
+        color: var(--on-surface);
+        width: 100%;
+        background: #fff;
+    }
+    .proxy-grid input:focus,
+    .proxy-grid select:focus {
+        outline: none;
+        border-color: var(--primary-color);
+        box-shadow: 0 0 0 2px var(--primary-light);
+    }
+    .proxy-del-btn {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        color: var(--error-color);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 4px;
+        border-radius: 4px;
+    }
+    .proxy-del-btn:hover { background: var(--error-light); }
+
+    .msg-box {
+        display: none;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 14px 18px;
+        border-radius: 8px;
+        margin: 0 0 20px 0;
+        font-size: 14px;
+        line-height: 1.6;
+    }
+    .msg-box.show { display: flex; }
+    .msg-box.success { background-color: var(--accent-light); color: var(--accent-color); }
+    .msg-box.error   { background-color: var(--error-light); color: var(--error-color); }
+    .msg-box.info    { background-color: var(--primary-light); color: var(--primary-dark); }
+    .msg-box .material-icons { font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+
+    .edge-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .meta-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border-radius: 16px;
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.25px;
+        background: var(--primary-light);
+        color: var(--primary-dark);
+    }
+    .meta-chip .material-icons { font-size: 15px; }
+
+    .page-not-found {
+        text-align: center;
+        padding: 80px 20px;
+        color: var(--on-surface-secondary);
+    }
+    .page-not-found .material-icons { font-size: 64px; color: var(--divider-color); margin-bottom: 12px; }
+    .page-not-found a { color: var(--primary-color); text-decoration: none; }
+
+    /* ---- 配置类型折叠面板 (多种配置类型并列, 默认折叠) ---- */
+    .cfg-accordion {
+        background: var(--surface-color);
+        border-radius: 8px;
+        box-shadow: var(--elevation-1);
+        margin-bottom: 20px;
+        overflow: hidden;
+        transition: box-shadow 0.3s ease;
+    }
+    .cfg-accordion:hover { box-shadow: var(--elevation-2); }
+
+    .cfg-acc-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 18px 24px;
+        cursor: pointer;
+        user-select: none;
+        border-bottom: 1px solid var(--divider-color);
+        transition: background-color 0.2s ease;
+    }
+    .cfg-acc-head:hover { background-color: var(--primary-light); }
+    .cfg-acc-arrow {
+        transition: transform 0.25s ease;
+        color: var(--on-surface-hint);
+        font-size: 20px;
+    }
+    .cfg-accordion:not(.collapsed) .cfg-acc-arrow { transform: rotate(90deg); }
+    .cfg-acc-icon { color: var(--primary-color); font-size: 22px; }
+    .cfg-acc-title { font-size: 16px; font-weight: 500; color: var(--on-surface); }
+    .cfg-acc-badge {
+        font-size: 12px;
+        font-weight: 500;
+        letter-spacing: 0.25px;
+        padding: 3px 10px;
+        border-radius: 12px;
+        background: var(--accent-light);
+        color: var(--accent-color);
+    }
+    .cfg-acc-caret {
+        margin-left: auto;
+        color: var(--on-surface-hint);
+        transition: transform 0.25s ease;
+    }
+    .cfg-accordion:not(.collapsed) .cfg-acc-caret { transform: rotate(180deg); }
+
+    .cfg-acc-body {
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.3s ease;
+        padding: 0 24px;
+    }
+    .cfg-accordion:not(.collapsed) .cfg-acc-body {
+        max-height: 4000px;
+        padding: 24px 24px 8px;
+    }
+
+    /* ---- Token 明文/密文切换 ---- */
+    .token-input-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+    }
+    .token-input-wrap input {
+        padding-right: 40px;
+    }
+    .token-eye {
+        position: absolute;
+        right: 4px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        color: var(--on-surface-hint);
+        display: inline-flex;
+        align-items: center;
+        padding: 6px;
+        border-radius: 4px;
+    }
+    .token-eye:hover { color: var(--primary-color); background: var(--primary-light); }
+    .token-eye .material-icons { font-size: 20px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="padding: 24px 0;">
+    <div class="config-page-head" style="padding: 0 24px;">
+        <div class="config-title">
+            <span class="material-icons">settings_ethernet</span>
+            <span>Edge 配置</span>
+        </div>
+    </div>
+
+    <div class="edge-meta" style="padding: 0 24px;">
+        <span class="meta-chip"><span class="material-icons">devices</span>edge_id: <b id="meta-edge-id">{{ edge_id }}</b></span>
+        <span class="meta-chip"><span class="material-icons">tag</span>config_status: <b id="meta-status">-</b></span>
+        <span class="meta-chip"><span class="material-icons">memory</span>version: <b id="meta-version">-</b></span>
+    </div>
+
+    <div id="msg-box" class="msg-box">
+        <span class="material-icons" id="msg-icon">info</span>
+        <span id="msg-text"></span>
+    </div>
+
+    <!-- 配置类型分区：每种配置类型一个可折叠面板，默认折叠 -->
+    <div id="cfg-panels" style="margin: 0 24px;">
+        <!-- ==================== SHPC 配置 ==================== -->
+        <div class="cfg-accordion collapsed" id="cfg-shpc">
+            <div class="cfg-acc-head" onclick="togglePanel('cfg-shpc')">
+                <span class="material-icons cfg-acc-arrow">chevron_right</span>
+                <span class="material-icons cfg-acc-icon">alt_route</span>
+                <span class="cfg-acc-title">SHPC 配置</span>
+                <span class="cfg-acc-badge" id="cfg-shpc-badge">frpc 隧道</span>
+                <span class="material-icons cfg-acc-caret">expand_more</span>
+            </div>
+            <div class="cfg-acc-body">
+                <!-- 服务端连接 (tunnelService.endpoint) -->
+                <div class="config-section" style="margin: 0 0 16px;">
+                    <h3><span class="material-icons">dns</span>服务端连接</h3>
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label>服务器地址 (endpoint.host)</label>
+                            <input type="text" id="f-server-addr" placeholder="10.220.42.139">
+                            <span class="hint">frpc serverAddr（访问端点）</span>
+                        </div>
+                        <div class="form-field">
+                            <label>服务器端口 (endpoint.port)</label>
+                            <input type="number" id="f-server-port" placeholder="50400" min="1" max="65535">
+                            <span class="hint">frpc serverPort</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 本地管理 (localManagement) -->
+                <div class="config-section" style="margin: 0 0 16px;">
+                    <h3><span class="material-icons">web</span>本地管理</h3>
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label>绑定地址 (localManagement.bindAddress)</label>
+                            <input type="text" id="f-web-addr" placeholder="127.0.0.1">
+                            <span class="hint">frpc 本地管理 webServer addr</span>
+                        </div>
+                        <div class="form-field">
+                            <label>绑定端口 (localManagement.bindPort)</label>
+                            <input type="number" id="f-web-port" placeholder="17400" min="0" max="65535">
+                            <span class="hint">frpc 本地管理 webServer port</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 安全 (security) -->
+                <div class="config-section" style="margin: 0 0 16px;">
+                    <h3><span class="material-icons">security</span>安全</h3>
+                    <div class="form-grid">
+                        <div class="form-field">
+                            <label>认证方式 (security.authMethod)</label>
+                            <select id="f-auth-method">
+                                <option value="token">token</option>
+                                <option value="none">none</option>
+                            </select>
+                            <span class="hint">frpc auth method</span>
+                        </div>
+                        <div class="form-field">
+                            <label>认证凭证 Token (security.credential)</label>
+                            <div class="token-input-wrap">
+                                <input type="password" id="f-token" placeholder="输入访问令牌">
+                                <button class="token-eye" type="button" onclick="toggleTokenVisible(this)" title="显示/隐藏 Token">
+                                    <span class="material-icons">visibility_off</span>
+                                </button>
+                            </div>
+                            <span class="hint">frpc auth token（服务器端校验）</span>
+                        </div>
+                        <div class="form-field form-check">
+                            <label>启用 TLS</label>
+                            <div style="display:flex;align-items:center;gap:10px;">
+                                <input type="checkbox" id="f-tls-enable">
+                                <span>transport.tls.enable</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 访问策略 (accessPolicies -> proxies) -->
+                <div class="config-section" style="margin: 0;">
+                    <h3><span class="material-icons">alt_route</span>访问策略 / 代理</h3>
+                    <div class="proxy-toolbar">
+                        <button class="btn btn-secondary" onclick="addProxyRow()">
+                            <span class="material-icons">add</span>
+                            添加策略
+                        </button>
+                    </div>
+                    <div id="proxy-header" class="proxy-grid proxy-grid-header">
+                        <div>策略ID (policyId)</div>
+                        <div>协议 (protocol)</div>
+                        <div>目标IP (ip)</div>
+                        <div>目标端口 (port)</div>
+                        <div>暴露端口 (exposedPort)</div>
+                        <div>描述 (description)</div>
+                        <div>操作</div>
+                    </div>
+                    <div id="proxy-rows"><!-- 动态添加策略行 --></div>
+                </div>
+
+                <!-- SHPC 配置专属操作：每类配置独立，加载/保存下发放在本类面板内
+                     从平台加载 = 从数据库加载；从设备同步 = 从 edge 前端获取；保存下发 = 写入 DB+edge -->
+                <div class="config-actions" style="margin: 20px 0 0; padding-top: 16px; border-top: 1px solid var(--divider, #e0e0e0);">
+                    <button class="btn btn-secondary" id="btn-load" onclick="loadConfig()" title="从数据库（平台）加载配置">
+                        <span class="material-icons">database</span>
+                        从平台加载
+                    </button>
+                    {% if edge_online %}
+                    <button class="btn btn-secondary" id="btn-sync" onclick="syncConfig(this)" title="从 Edge 前端（设备）获取配置">
+                        <span class="material-icons">sync</span>
+                        <span class="btn-label">从设备同步</span>
+                    </button>
+                    {% endif %}
+                    <button class="btn btn-primary" onclick="saveConfig(this)">
+                        <span class="material-icons">save</span>
+                        保存并下发
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- 未来可并列添加其他配置类型面板（如 line: <div class="cfg-accordion" id="cfg-xxx">...</div>） -->
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const EDGE_ID = {{ edge_id | tojson }};
+    const EDGE_EXISTS = {{ edge_exists | tojson }};
+    const EDGE_ONLINE = {{ edge_online | tojson }};
+
+    /* ---- 配置类型面板折叠/展开 ---- */
+    function togglePanel(panelId) {
+        const panel = document.getElementById(panelId);
+        panel.classList.toggle('collapsed');
+    }
+
+    /* ---- Token 明文/密文切换 ---- */
+    function toggleTokenVisible(btn) {
+        const input = document.getElementById('f-token');
+        const icon = btn.querySelector('.material-icons');
+        if (input.type === 'password') {
+            input.type = 'text';
+            icon.textContent = 'visibility';
+        } else {
+            input.type = 'password';
+            icon.textContent = 'visibility_off';
+        }
+    }
+
+    function showMsg(type, text) {
+        const box = document.getElementById('msg-box');
+        const icon = document.getElementById('msg-icon');
+        box.className = 'msg-box show ' + type;
+        icon.textContent = type === 'success' ? 'check_circle'
+                         : type === 'error' ? 'error' : 'info';
+        document.getElementById('msg-text').textContent = text;
+        box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    function clearMsg() {
+        document.getElementById('msg-box').className = 'msg-box';
+    }
+
+    function setMeta(status, version) {
+        document.getElementById('meta-status').textContent = status || '-';
+        document.getElementById('meta-version').textContent = (version === undefined || version === null) ? '-' : version;
+    }
+
+    /* ---- 空白代理行 ---- */
+    function newProxyRowData() {
+        return { name: '', type: 'tcp', localIP: '127.0.0.1', localPort: 55555, remotePort: 51422, description: '' };
+    }
+
+    function proxyRowHtml(p) {
+        return `
+        <div class="proxy-grid" data-name="${p.name}">
+            <input type="text" class="pr-name" value="${esc(p.name)}" placeholder="w-tcp-51422">
+            <select class="pr-type">
+                <option value="tcp" ${p.type === 'tcp' ? 'selected' : ''}>tcp</option>
+                <option value="udp" ${p.type === 'udp' ? 'selected' : ''}>udp</option>
+                <option value="http" ${p.type === 'http' ? 'selected' : ''}>http</option>
+            </select>
+            <input type="text" class="pr-localip" value="${esc(p.localIP)}" placeholder="127.0.0.1">
+            <input type="number" class="pr-localport" value="${p.localPort}" min="0" max="65535">
+            <input type="number" class="pr-remoteport" value="${p.remotePort}" min="0" max="65535">
+            <input type="text" class="pr-desc" value="${esc(p.description || '')}">
+            <div style="display:flex;justify-content:center;">
+                <button class="proxy-del-btn" title="删除策略" onclick="this.closest('.proxy-grid').remove()">
+                    <span class="material-icons" style="font-size:18px;">delete</span>
+                </button>
+            </div>
+        </div>`;
+    }
+
+    function addProxyRow(p) {
+        const row = proxyRowHtml(p || newProxyRowData());
+        document.getElementById('proxy-rows').insertAdjacentHTML('beforeend', row);
+    }
+
+    function esc(s) {
+        return String(s === undefined || s === null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    /* ---- 表单 <-> config_content 双向映射 ---- */
+    // config_content.services[0].tunnelService / accessPolicies 结构见 update_edge_config
+    function readForm() {
+        const rows = Array.from(document.querySelectorAll('#proxy-rows .proxy-grid')).map(row => {
+            return {
+                policyId: row.querySelector('.pr-name').value.trim() || 'w-tcp',
+                protocol: row.querySelector('.pr-type').value,
+                targetService: {
+                    ip: row.querySelector('.pr-localip').value.trim() || '127.0.0.1',
+                    port: parseInt(row.querySelector('.pr-localport').value, 10) || 0
+                },
+                exposedPort: parseInt(row.querySelector('.pr-remoteport').value, 10) || 0,
+                description: row.querySelector('.pr-desc').value.trim()
+            };
+        });
+        const config_content = {
+            services: [{
+                serviceName: 'http-tunnel',
+                tunnelService: {
+                    endpoint: {
+                        host: document.getElementById('f-server-addr').value.trim(),
+                        port: parseInt(document.getElementById('f-server-port').value, 10) || 0
+                    },
+                    localManagement: {
+                        bindAddress: document.getElementById('f-web-addr').value.trim() || '127.0.0.1',
+                        bindPort: parseInt(document.getElementById('f-web-port').value, 10) || 0
+                    },
+                    security: {
+                        authMethod: document.getElementById('f-auth-method').value,
+                        credential: document.getElementById('f-token').value,
+                        enableTls: document.getElementById('f-tls-enable').checked
+                    }
+                },
+                accessPolicies: rows.length ? rows : [{
+                    policyId: 'w-tcp',
+                    protocol: 'tcp',
+                    targetService: { ip: '127.0.0.1', port: 55555 },
+                    exposedPort: 51422,
+                    description: ''
+                }]
+            }]
+        };
+        return {
+            edge_id: EDGE_ID,
+            config_type: 'tunnelService',
+            config_content: config_content
+        };
+    }
+
+    function fillForm(cfg) {
+        // GET 返回 frpc 嵌套权威结构
+        const serverAddr = (cfg.serverAddr || '').toString();
+        const serverPort = parseInt(cfg.serverPort, 10);
+        const auth = cfg.auth || {};
+        const transport = cfg.transport || {};
+        const tls = (transport.tls && transport.tls.enable) || false;
+        const webServer = cfg.webServer || {};
+        document.getElementById('f-server-addr').value = serverAddr;
+        document.getElementById('f-server-port').value = isNaN(serverPort) ? '' : serverPort;
+        document.getElementById('f-web-addr').value = (webServer.addr || '127.0.0.1').toString();
+        document.getElementById('f-web-port').value = (webServer.port || 0).toString();
+        document.getElementById('f-auth-method').value = (auth.method === 'none') ? 'none' : 'token';
+        document.getElementById('f-token').value = auth.token || '';
+        document.getElementById('f-tls-enable').checked = !!tls;
+
+        document.getElementById('proxy-rows').innerHTML = '';
+        const proxies = cfg.proxies || [];
+        if (proxies.length === 0) {
+            addProxyRow();
+        } else {
+            proxies.forEach(p => addProxyRow({
+                name: p.name, type: p.type, localIP: p.localIP,
+                localPort: p.localPort, remotePort: p.remotePort, description: p.description
+            }));
+        }
+    }
+
+    /* ---- 加载配置 (GET config/get) ---- */
+    // 数据库可能尚无记录（首次打开），而 Edge 本地已有 shpc 配置文件：
+    // config/get 会后台异步发起 edge.config.query 让 Edge 回读本地文件并写回 DB。
+    // 因此首次返回为空时，短暂重试等待后台同步完成，避免页面只显示空表单。
+    function fetchConfigOnce() {
+        return fetch('/api/v1/edges/config/get', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ edge_id: EDGE_ID })
+        }).then(r => r.json());
+    }
+
+    function isEmptyConfig(cfg) {
+        return !cfg || typeof cfg !== 'object' || !Object.keys(cfg).length;
+    }
+
+    // 判断是否为后端返回的默认模板(数据库无任何已保存配置, 且 Edge 不可在线回读)
+    function isDefaultTemplate(cfg) {
+        if (isEmptyConfig(cfg)) return false;
+        // 默认配置的特征: 无 token、无任何 proxy、tls 开启、webServer.port=17401
+        return !(cfg.auth && cfg.auth.token)
+            && !(cfg.proxies && cfg.proxies.length)
+            && (cfg.transport && cfg.transport.tls && cfg.transport.tls.enable)
+            && (cfg.webServer && cfg.webServer.port === 17401)
+            && (cfg.serverPort === 17400);
+    }
+
+    function loadConfig() {
+        clearMsg();
+        fetchConfigOnce().then(data => {
+            if (data.code !== 0) {
+                showMsg('error', '加载失败: ' + (data.message || data.code));
+                return;
+            }
+            fillForm(data.config || {});
+            setMeta(data.config_status, data.config_version);
+            const st = data.config_status;
+            // config_sync/config_matched: 以 edge 前端为准做一致性核对，区分三种情况精确提示：
+            //   'missing'  = edge 本地配置文件缺失/无法读取 -> 提示"配置不存在"
+            //   'mismatch' = edge 本地配置存在但与 DB 不一致 -> 提示"配置不一致(待同步)"
+            //   'matched'  = 一致 -> 正常提示
+            if (data.config_sync === 'missing') {
+                showMsg('error', '⚠ Edge 本地配置不存在：数据库中虽有配置，但 Edge 本地配置文件 ' +
+                    (st === 'confirmed' ? '已缺失/无法读取，' : '尚未生成，') +
+                    'Edge 实际未加载该配置。请点击"保存并下发"将数据库配置写入 Edge 本地文件。');
+            } else if (data.config_sync === 'bad') {
+                showMsg('error', '⚠ Edge 本地配置文件存在但无法解析（JSON 格式异常）：' +
+                    '当前表单显示的是数据库中的配置。请检查 Edge 本地配置文件内容，或点击"保存并下发"用平台配置覆盖。');
+            } else if (data.config_sync === 'mismatch') {
+                showMsg('error', '⚠ 与 Edge 运行配置不一致（待同步）：数据库中的配置与 Edge 本地配置不一致' +
+                    '，当前表单显示的是数据库中的配置。' + (st === 'confirmed'
+                        ? '状态虽为 confirmed，但 Edge 实际运行配置已偏离；请检查 Edge 本地配置文件，或点击"保存并下发"重新对齐。'
+                        : '请点击"保存并下发"将数据库配置下发到 Edge 完成对齐。'));
+            } else if (isEmptyConfig(data.config) || isDefaultTemplate(data.config)) {
+                // 数据库无已保存配置且不可在线回读 -> 后端已返回默认模板
+                showMsg('info', '该 Edge 还没有保存过配置，已加载后端默认配置模板。请填写后点击"保存并下发"。');
+            } else if (st === 'confirmed') {
+                showMsg('success', '已加载配置 (version=' + data.config_version + '，状态已确认)。');
+            } else if (st === 'unknown') {
+                // unknown = 该 Edge 从未经 manager 下发并确认, 当前配置来自本地回读(DB 已存)。
+                // "加载配置"只读取, 不改变状态; 需"保存并下发"才会走 下发->edge ack->confirmed。
+                showMsg('info', '已读取配置但状态为 unknown（未确认）。这是正常现象：该 Edge 尚未经下发确认流程。请点击"保存并下发"完成下发，状态才会变为 confirmed。');
+            } else {
+                showMsg('info', '已加载配置 (config_status=' + st + ')。后台正在向 Edge 同步。');
+            }
+        }).catch(e => {
+            showMsg('error', '网络错误: ' + e);
+        });
+    }
+
+    /* ---- 同步配置 (POST config/sync): 从 edge 前端获取真实配置 ---- */
+    function syncConfig(btnEl) {
+        clearMsg();
+        const btn = btnEl;
+        const label = btn.querySelector('.btn-label');
+        const origHtml = btn.innerHTML;
+        btn.disabled = true;
+
+        // 倒计时 3s 后自动从 edge 获取一次
+        let count = 3;
+        const tick = () => {
+            label.textContent = '获取中 (' + count + 's)';
+            if (count <= 0) {
+                doSyncFetch(btn, label, origHtml);
+                return;
+            }
+            count--;
+            setTimeout(tick, 1000);
+        };
+        tick();
+
+        showMsg('info', '将从 Edge 前端获取最新配置（3 秒后自动获取）...');
+    }
+
+    function doSyncFetch(btn, label, origHtml) {
+        fetch('/api/v1/edges/config/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ edge_id: EDGE_ID })
+        }).then(r => r.json()).then(data => {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+            if (data.code !== 0) {
+                showMsg('error', '同步失败: ' + (data.message || data.code));
+                return;
+            }
+            // 展示 edge 前端真实配置到当前表单
+            if (data.config) {
+                fillForm(data.config);
+            }
+            setMeta(data.config_status, data.config_version);
+
+            if (data.sync_state === 'unreachable') {
+                showMsg('error', '⚠ 无法与 Edge 通信（Edge 离线或连接异常），未能从设备同步配置。');
+                return;
+            }
+            if (data.sync_state === 'missing') {
+                showMsg('error', '⚠ 设备本地配置文件不存在/无法打开，无法从设备同步配置。' +
+                    '请检查 Edge 本地配置文件是否生成，或点击"保存并下发"将平台配置写入 Edge。');
+                return;
+            }
+            if (data.sync_state === 'bad') {
+                showMsg('error', '⚠ 设备本地配置文件存在但无法解析（JSON 格式异常）。' +
+                    '请检查 Edge 本地配置文件内容，或点击"保存并下发"用平台配置覆盖。');
+                return;
+            }
+            if (data.sync_state === 'unreadable') {
+                showMsg('error', '⚠ 设备本地配置不可读：无法从设备获取配置（配置文件缺失或解析失败）。' +
+                    '请检查 Edge 本地配置文件，或点击"保存并下发"将平台配置写入 Edge。');
+                return;
+            }
+            const stime = data.sync_at ? ('（最后同步 ' + fmtMsTime(data.sync_at) + '）') : '';
+            if (data.differ === true) {
+                showMsg('error', '⚠ Edge 配置与平台（数据库）不一致：已展示从设备获取的真实配置。' +
+                    '若要以设备为准请点击"保存并下发"写入平台；若要以平台为准请点击"从平台加载"。' + stime);
+            } else if (data.differ === false) {
+                showMsg('success', '已从设备同步配置，与平台一致。' + stime);
+            } else {
+                showMsg('info', '已展示设备前端配置。' + stime);
+            }
+        }).catch(e => {
+            btn.disabled = false;
+            btn.innerHTML = origHtml;
+            showMsg('error', '网络错误: ' + e);
+        });
+    }
+
+    function fmtMsTime(ms) {
+        const d = new Date(ms);
+        const pad = n => String(n).padStart(2, '0');
+        return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+            ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+    }
+
+    /* ---- 保存并下发 (POST config/update) ---- */
+    function saveConfig(btnEl) {
+        clearMsg();
+        const payload = readForm();
+        const btn = btnEl;
+        const orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-icons">hourglass_top</span> 下发中...';
+        fetch('/api/v1/edges/config/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        }).then(r => r.json()).then(data => {
+            if (data.code !== 0) {
+                showMsg('error', '保存失败: ' + (data.message || data.code));
+                return;
+            }
+            showMsg('success', '配置已下发成功 (version=' + data.config_version + ')，等待 Edge 确认...');
+            setMeta(data.config_status, data.config_version);
+            // 轮询 config/get 等待 confirmed
+            pollStatus();
+        }).catch(e => showMsg('error', '网络错误: ' + e))
+        .finally(() => { btn.disabled = false; btn.innerHTML = orig; });
+    }
+
+    /* ---- 轮询直到 config_status -> confirmed ---- */
+    function pollStatus() {
+        let tries = 0;
+        const timer = setInterval(() => {
+            fetch('/api/v1/edges/config/get', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ edge_id: EDGE_ID })
+            }).then(r => r.json()).then(data => {
+                if (data.code === 0) {
+                    setMeta(data.config_status, data.config_version);
+                    if (data.config_status === 'confirmed') {
+                        clearInterval(timer);
+                        // 后台异步刷新可能已更新 DB，重读表单回填一次
+                        if (data.config && data.config.serverAddr) {
+                            fillForm(data.config);
+                        }
+                        showMsg('success', '✅ 配置已确认生效 (version=' + data.config_version + ')');
+                    } else if (data.config_status === 'config_failed') {
+                        clearInterval(timer);
+                        showMsg('error', '⚠ Edge 确认配置失败 (config_status=config_failed)');
+                    }
+                }
+                tries++;
+                if (tries >= 30) { clearInterval(timer); }
+            }).catch(() => { tries++; if (tries >= 30) clearInterval(timer); });
+        }, 1000);
+    }
+
+    // 初始：若 Edge 存在则自动加载一次配置
+    if (EDGE_EXISTS) {
+        loadConfig();
+    }
+</script>
+{% endblock %}

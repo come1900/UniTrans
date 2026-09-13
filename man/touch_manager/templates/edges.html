@@ -80,7 +80,7 @@
                         <th>确认</th>
                     <th>PUB IP</th>
                     <th>链接时长</th>
-                        <th style="width: 120px;">操作</th>
+                        <th style="width: 160px;">操作</th>
                 </tr>
             </thead>
             <tbody id="edges-tbody">
@@ -323,6 +323,12 @@ function renderEdges(edgeList) {
                         <span class="material-icons" style="font-size: 16px; color: var(--error-color);">close</span>
                     </button>
                     `}
+                    <!-- 配置按钮：所有边缘都显示，跳转独立配置页 -->
+                    <button class="page-btn" style="min-width: 32px; height: 32px;"
+                        onclick="openEdgeConfig('${escapeHtml(edge.edge_id)}')"
+                        title="配置远程 (frpc)">
+                        <span class="material-icons" style="font-size: 16px; color: var(--primary-color);">settings</span>
+                    </button>
                     <!-- 删除按钮：所有边缘都显示 -->
                     <button class="page-btn" style="min-width: 32px; height: 32px;"
                         onclick="deleteEdge('${escapeHtml(edge.edge_id)}')"
@@ -472,6 +478,11 @@ function rejectEdge(edgeId) {
         .catch(err => {
             alert('拒绝失败：' + err.message);
         });
+}
+
+function openEdgeConfig(edgeId) {
+    // 跳转到独立配置编辑页（第三阶段 frpc 远程配置界面）
+    window.location.href = '/edges/config?edge_id=' + encodeURIComponent(edgeId);
 }
 
 function deleteEdge(edgeId) {

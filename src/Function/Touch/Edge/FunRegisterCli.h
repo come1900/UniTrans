@@ -75,11 +75,19 @@ private:
     bool m_registered;       // 标记是否已注册成功
     CEZTimer m_heartbeat_timer;  // 心跳定时器
     static const int HEARTBEAT_INTERVAL_SEC = 30;  // 心跳间隔（秒）
+    static const std::string FRPC_CONFIG_DIR;  // frpc 配置目录
+    std::string get_frpc_config_path() const;  // 该 edge 的 frpc 配置文件路径(按 edge_id 区分)
 
     // WebSocket 统一信号槽处理函数
     void OnWebsocketNotify(CDevWsRegisterCli::SignalType sig_type, const void *data, size_t len, int param1, int param2);
 
-    void handle_receive(const void *data, size_t len);
+    void handle_receive(const void *data, size_t len);  // frpc 远程配置处理（第一阶段实现）
+    bool write_frpc_config_file(const std::string& jsonStr);
+    void send_config_ack_success(int64_t req_id);
+    void send_config_ack_error(int64_t req_id, int32_t code, const std::string& msg);
+    void send_config_query_error(int64_t req_id, int32_t code, const std::string& msg);
+    void send_message(const char *data, size_t len);
+
     void handle_register_ack_jsonrpc2(const AckEdgeOnline& ack);  // JSON-RPC 2.0 格式
     void handle_register_ack_jsonrpc2_error(int32_t error_code, const std::string& error_msg);  // JSON-RPC 2.0 错误
 

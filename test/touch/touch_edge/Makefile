@@ -24,6 +24,7 @@ include         ../../../build/Makefile.Defines/Makefile.Defines.$(PLATFORM)
 CFLAGS += -Wall -g -O2 -MD
 # CFLAGS += -std=c++11
 CFLAGS += -D_DEBUG #debugme
+CFLAGS += -D_USE_EZLOG_FILENAME
 
 ##############################################################################
 # 代码文件位置 - 复用正式代码，但在本地编译
@@ -98,3 +99,4 @@ clean:
 	rm -f $(CLEAN_FILES)
 	rm -rf $(TOUCH_EDGE_LOCAL_OBJDIR)
 	find . -name "*.d" | xargs rm -f 2>/dev/null || true
+	rm -f *.log

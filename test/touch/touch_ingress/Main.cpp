@@ -22,9 +22,12 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <signal.h>
+
 #include "FunRegisterSvr.h"
 #include "EZThread.h"
 #include "EZTimer.h"
+
+#include <ezutil/ez_log.h>
 
 // 默认参数
 #define DEFAULT_PORT    54321
@@ -60,9 +63,9 @@ void on_device_register(int client_id, const std::string& device_id, bool succes
 
     // 根据 device_id 区分 manager 和 edge
     if (device_id == "manager") {
-        printf("Manager connected: client_id=%d, success=%d\n", client_id, success);
+        ez_printf_info("Manager connected: client_id=%d, success=%d\n", client_id, success);
     } else {
-        printf("Edge device register: client_id=%d, device_id=%s, success=%d\n",
+        ez_printf_info("Edge device register: client_id=%d, device_id=%s, success=%d\n",
                client_id, device_id.c_str(), success);
     }
 }
@@ -121,6 +124,11 @@ int main(int argc, char *argv[])
         return 0;
     }
     
+    const char *fname = "_ingress.log";
+    const int iLevel = EZ_LOG_TO_FILE_AND_STDOUT*10+EZ_LOG_LEVEL_DEBUG;
+    ez_log_structure(fname, 3, 3*1024*1024);
+    ez_log_set_level(iLevel);
+
     // 应用参数（选项参数优先，位置参数次之）
     unsigned short port = arg_port ? (unsigned short)atoi(arg_port) : 
                           (arglist_count > 0 ? (unsigned short)atoi(arglist[0]) : DEFAULT_PORT);
@@ -134,6 +142,7 @@ int main(int argc, char *argv[])
     }
 
     printf("touch_ingress: Starting server on port %d, bind: %s\n", port, bind_addr);
+
 
     // 初始化 ezThread
     g_TimerManager.Start();

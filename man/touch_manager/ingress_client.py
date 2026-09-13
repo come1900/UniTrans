@@ -143,8 +143,8 @@ class IngressClient:
                     # Send initial handshake (v0.1 MVP - simple connection)
                     await self._send_handshake()
 
-                    # Start receiving messages
-                    await self._receive_messages()
+                    # Start receiving messages (+ 并行的 loop-wide 停滞看门狗)
+                    await asyncio.gather(self._receive_messages(), self._loop_tick_monitor())
 
             except websockets.exceptions.ConnectionClosed as e:
                 logger.warning(f"Connection to ingress {self.ingress_id} closed: code={e.code}, reason={e.reason}")
@@ -213,7 +213,13 @@ class IngressClient:
                 try:
                     data = json.loads(message)
                     logger.debug(f"Received raw message from ingress {self.ingress_id}: {data}")
+                    _t0 = time.monotonic()
                     await self._handle_message(data)
+                    _dt = (time.monotonic() - _t0) * 1000.0
+                    # 定位 manager 事件循环是否在某条消息处理中阻塞（丢 pong 窗口）
+                    logger.debug(f"[LATENCY] manager _handle_message took {_dt:.2f} ms (msg_method={data.get('method', data.get('id',''))})")
+                    if _dt > 200:
+                        logger.warning(f"[EVENTLOOP] manager _handle_message blocked event loop for {_dt:.1f} ms (ingress {self.ingress_id})")
                 except json.JSONDecodeError as e:
                     logger.error(f"Invalid JSON from ingress {self.ingress_id}: {e}, raw message: {message[:200]}")
                 except Exception as e:
@@ -228,6 +234,23 @@ class IngressClient:
             self.connected = False  # 确保连接状态及时更新
             # 如果连接错误导致断开，也需要更新设备状态
             await self._notify_ingress_offline()
+
+    async def _loop_tick_monitor(self):
+        """Watchdog: detect ANY event-loop stall (not just inside _handle_message).
+
+        定时心跳 10ms 一次，若某次 tick 间隔异常（>200ms），说明事件循环被
+        _handle_message 之外的东西阻塞 —— 这正是 keepalive pong 迟到/丢失的根因候选。
+
+        循环条件跟随 self.connected：_receive_messages 因连接断开而结束时置
+        self.connected=False，本看门狗随即退出，使 asyncio.gather 返回、
+        _connect_loop 能继续执行重连逻辑（否则 while True 会让 gather 永不返回）。
+        """
+        while self.connected:
+            _t0 = time.monotonic()
+            await asyncio.sleep(0.01)  # ~10ms tick，空闲时几乎无开销
+            _dt = (time.monotonic() - _t0) * 1000.0
+            if _dt > 200:
+                logger.warning(f"[EVENTLOOP] manager event loop stalled for {_dt:.1f} ms (loop-wide, ingress {self.ingress_id})")
 
     async def _handle_message(self, data: Dict):
         """Handle incoming message from ingress."""
@@ -305,6 +328,41 @@ class IngressClient:
             elif "result" in data or "error" in data:
                 # 响应消息
                 req_id = data.get("id")
+                
+                # 检查是否为 frpc 远程配置响应（AckConfigUpdate）
+                if "result" in data:
+                    result = data["result"]
+                    if isinstance(result, dict) and "code" in result and "message" in result:
+                        # AckConfigUpdate 响应
+                        # 查找对应的 Future 并设置结果并更新数据库
+                        future = None
+                        if hasattr(self, '_response_futures') and req_id in self._response_futures:
+                            future = self._response_futures.get(req_id)  # 不 pop，保留 future
+                        
+                        # 只有 applied=True 才设置 future 结果并清理
+                        applied = result.get('applied', False)
+                        if applied:
+                            # 设置 future 结果（如果存在）—— 轻量操作，留在事件循环内
+                            if future and not future.done():
+                                future.set_result(data)
+                                self._response_futures.pop(req_id, None)
+                                logger.debug(f"Config ack response (id={req_id}) from ingress {self.ingress_id}: applied=True, future set")
+
+                            # 更新数据库中的 config_status 为 confirmed
+                            # 同步 DB 操作放到工作线程执行，避免阻塞 asyncio 事件循环，
+                            # 否则可能因来不及处理 pong 回调而触发 keepalive 超时（误判 ingress 离线）。
+                            edge_id = result.get('edge_id')
+                            if edge_id:
+                                await asyncio.to_thread(self._mark_config_confirmed, edge_id, req_id)
+                            else:
+                                logger.warning(f"Config ack response (id={req_id}) without edge_id")
+                        else:
+                            # applied=False 只是转发确认，不清理 future
+                            logger.debug(f"Config ack response (id={req_id}) from ingress {self.ingress_id}: applied=False, waiting for edge ack")
+                        # 跳过后续处理
+                        return
+                
+                # 处理其他响应（如 edge.list 响应）
                 if req_id and hasattr(self, '_req_id_to_query_id') and req_id in self._req_id_to_query_id:
                     # 通过 req_id 查找对应的 query_id 和 Future
                     query_id = self._req_id_to_query_id.pop(req_id)
@@ -317,6 +375,14 @@ class IngressClient:
                             logger.warning(f"Future for query_id={query_id} already done")
                     else:
                         logger.warning(f"Received edge.list response for unknown query_id={query_id} from ingress {self.ingress_id}")
+                elif req_id and hasattr(self, '_response_futures') and req_id in self._response_futures:
+                    # 匹配 send_message_and_wait 注册的响应（如 edge.config.query 的配置查询结果）
+                    future = self._response_futures.get(req_id)
+                    if future and not future.done():
+                        future.set_result(data)
+                        logger.debug(f"Resolved wait-for response (id={req_id}) from ingress {self.ingress_id}")
+                    else:
+                        logger.warning(f"Future for req_id={req_id} already done or missing")
                 else:
                     logger.info(f"Received JSON-RPC 2.0 response (id={req_id}) from ingress {self.ingress_id}: {data}")
             else:
@@ -334,17 +400,87 @@ class IngressClient:
             else:
                 logger.info(f"Received unknown old format message type '{msg_type}' from ingress {self.ingress_id}: {data}")
 
+    def _mark_config_confirmed(self, edge_id: str, req_id: int):
+        """(同步，运行在工作线程) 将 edge 配置标记为 confirmed 并写入数据库。
+
+        通过 asyncio.to_thread 从事件循环中移出执行，避免阻塞 websocket 心跳
+        （否则外部触发 keepalive pong 超时会误判 ingress 离线）。
+        """
+        try:
+            from database import get_db, get_db_lock, Edge, EdgeConfig
+            from datetime import datetime
+            with get_db_lock():
+                db = get_db()
+                try:
+                    edge = db.query(Edge).filter(Edge.edge_id == edge_id).first()
+                    if edge:
+                        edge.config_status = 'confirmed'
+                        edge.updated_at = datetime.utcnow()
+                        # 清除 configuring_since，因为配置已确认
+                        edge_config = db.query(EdgeConfig).filter(EdgeConfig.edge_id == edge_id).first()
+                        if edge_config:
+                            edge_config.configuring_since = None
+                        db.commit()
+                        logger.info(f"Config confirmed for edge {edge_id} (id={req_id})")
+                finally:
+                    db.close()
+        except Exception as e:
+            logger.error(f"Failed to mark config confirmed for edge {edge_id}: {e}")
+
     async def _handle_edge_online_request(self, req_id, edge_id, edge_type, local_ip, public_ip, online_since):
         """处理 ingress 发来的 edge.online 请求，返回 confirmed 状态"""
         try:
-            # 通过内部方法更新边缘状态（不通过 HTTP，直接调用数据库）
-            from database import get_db, Edge, EDGE_STATUS_OFFLINE
-            from datetime import datetime
-
+            # DB 操作放工作线程执行，避免阻塞事件循环（保持消息交互全异步）
             now = datetime.utcnow()
             if online_since:
                 now = datetime.utcfromtimestamp(online_since)
 
+            confirmed = await asyncio.to_thread(
+                self._sync_upsert_edge_online, edge_id, edge_type, local_ip, public_ip, now
+            )
+
+            # 如果边缘在黑名单中（confirmed=0），发送 kick 命令给 ingress
+            if confirmed == 0:
+                logger.warning(f"Edge {edge_id} is in blacklist (confirmed=0), sending kick command to ingress")
+                kick_command = {
+                    "jsonrpc": "2.0",
+                    "method": MANAGER_EDGE_KICK,
+                    "params": {
+                        "edge_id": edge_id,
+                        "reason": "Edge is in blacklist"
+                    },
+                    "id": int(time.time() * 1000) % (2**31)
+                }
+                await self.send_message(kick_command)
+
+            # 返回成功响应
+            response = {
+                "jsonrpc": "2.0",
+                "result": {
+                    "edge_id": edge_id,
+                    "success": True,
+                    "confirmed": confirmed,
+                    "message": "Edge online confirmed"
+                },
+                "id": req_id
+            }
+            await self.send_message(response)
+            logger.info(f"Sent edge.online confirmation response to ingress {self.ingress_id} (req_id={req_id}, edge_id={edge_id}, confirmed={confirmed})")
+
+        except Exception as e:
+            logger.error(f"Error handling edge.online request: {e}")
+            # 返回错误响应
+            error_response = {
+                "jsonrpc": "2.0",
+                "error": {"code": 50001, "message": str(e)},
+                "id": req_id
+            }
+            await self.send_message(error_response)
+
+    def _sync_upsert_edge_online(self, edge_id, edge_type, local_ip, public_ip, now):
+        """(同步，运行在工作线程) 登记/更新 edge 上线状态，返回 confirmed 值。"""
+        from database import get_db, get_db_lock, Edge, EDGE_STATUS_OFFLINE
+        with get_db_lock():
             db = get_db()
             try:
                 edge = db.query(Edge).filter(Edge.edge_id == edge_id).first()
@@ -382,107 +518,37 @@ class IngressClient:
                         edge.updated_at = datetime.utcnow()
 
                 db.commit()
-
-                # 如果边缘在黑名单中（confirmed=0），发送 kick 命令给 ingress
-                if confirmed == 0:
-                    logger.warning(f"Edge {edge_id} is in blacklist (confirmed=0), sending kick command to ingress")
-                    kick_command = {
-                        "jsonrpc": "2.0",
-                        "method": MANAGER_EDGE_KICK,
-                        "params": {
-                            "edge_id": edge_id,
-                            "reason": "Edge is in blacklist"
-                        },
-                        "id": int(time.time() * 1000) % (2**31)
-                    }
-                    await self.send_message(kick_command)
-
-                # 返回成功响应
-                response = {
-                    "jsonrpc": "2.0",
-                    "result": {
-                        "edge_id": edge_id,
-                        "success": True,
-                        "confirmed": confirmed,
-                        "message": "Edge online confirmed"
-                    },
-                    "id": req_id
-                }
-                await self.send_message(response)
-                logger.info(f"Sent edge.online confirmation response to ingress {self.ingress_id} (req_id={req_id}, edge_id={edge_id}, confirmed={confirmed})")
-
+                return confirmed
             finally:
                 db.close()
-
-        except Exception as e:
-            logger.error(f"Error handling edge.online request: {e}")
-            # 返回错误响应
-            error_response = {
-                "jsonrpc": "2.0",
-                "error": {"code": 50001, "message": str(e)},
-                "id": req_id
-            }
-            await self.send_message(error_response)
 
     async def _handle_edge_online_notification(self, edge_id, edge_type, local_ip, public_ip, online_since):
         """处理 ingress 发来的 edge.online 通知（不需要返回响应）"""
         try:
-            # 通过内部方法更新设备状态（不通过 HTTP，直接调用数据库）
-            from database import get_db, Edge
-            from datetime import datetime
-
             now = datetime.utcnow()
             if online_since:
                 now = datetime.utcfromtimestamp(online_since)
 
-            db = get_db()
-            try:
-                edge = db.query(Edge).filter(Edge.edge_id == edge_id).first()
+            # DB 操作放工作线程执行，避免阻塞事件循环（保持消息交互全异步）
+            confirmed = await asyncio.to_thread(
+                self._sync_upsert_edge_online, edge_id, edge_type, local_ip, public_ip, now
+            )
 
-                if not edge:
-                    # 新边缘自动注册
-                    edge = Edge(
-                        edge_id=edge_id,
-                        edge_type=edge_type,
-                        edge_key='',
-                        local_ip=local_ip,
-                        public_ip=public_ip,
-                        status=1,  # online
-                        confirmed=99,  # pending
-                        ingress_id=self.ingress_id,
-                        last_online_time=now,
-                        last_offline_time=now
-                    )
-                    db.add(edge)
-                    logger.info(f"New edge {edge_id} auto-registered from ingress notification: status=online, confirmed=99 (pending), ingress_id={self.ingress_id}")
-                else:
-                    # 已存在边缘，更新状态
-                    # 检查是否被拒绝
-                    if edge.confirmed == 0:
-                        # 边缘在黑名单中，但 ingress 仍然上报在线，需要踢掉设备
-                        logger.warning(f"Edge {edge_id} is in blacklist (confirmed=0) but ingress reported online, sending kick command")
-                        kick_command = {
-                            "jsonrpc": "2.0",
-                            "method": MANAGER_EDGE_KICK,
-                            "params": {
-                                "edge_id": edge_id,
-                                "reason": "Edge is in blacklist"
-                            },
-                            "id": int(time.time() * 1000) % (2**31)
-                        }
-                        await self.send_message(kick_command)
-                    else:
-                        # 更新状态
-                        edge.status = 1
-                        edge.last_online_time = now
-                        edge.last_offline_time = now
-                        edge.ingress_id = self.ingress_id
-                        logger.info(f"Edge {edge_id} status updated from ingress notification (status=online, confirmed={edge.confirmed}, ingress_id={self.ingress_id})")
-
-                db.commit()
-
-            finally:
-                db.close()
+            # 黑名单边缘仍上报在线，需要踢掉设备
+            if confirmed == 0:
+                logger.warning(f"Edge {edge_id} is in blacklist (confirmed=0) but ingress reported online, sending kick command")
+                kick_command = {
+                    "jsonrpc": "2.0",
+                    "method": MANAGER_EDGE_KICK,
+                    "params": {
+                        "edge_id": edge_id,
+                        "reason": "Edge is in blacklist"
+                    },
+                    "id": int(time.time() * 1000) % (2**31)
+                }
+                await self.send_message(kick_command)
+            else:
+                logger.info(f"Edge {edge_id} status updated from ingress notification (status=online, confirmed={confirmed}, ingress_id={self.ingress_id})")
 
         except Exception as e:
             logger.error(f"Error handling edge.online notification: {e}")
@@ -491,50 +557,17 @@ class IngressClient:
         """Notify manager that a edge is online (called by ingress).
 
         直接更新数据库，不通过 HTTP API。
-        使用数据库锁保护并发更新。
+        DB 操作放工作线程执行，避免阻塞事件循环。
         """
         try:
-            from database import get_db, get_db_lock, Edge, EDGE_STATUS_ONLINE
-
             now = datetime.utcnow()
             if online_since:
                 now = datetime.utcfromtimestamp(online_since)
 
-            # 使用数据库锁保护并发更新
-            with get_db_lock():
-                db = get_db()
-                try:
-                    edge = db.query(Edge).filter(Edge.edge_id == edge_id).first()
-
-                    if not edge:
-                        # 新边缘自动注册
-                        edge = Edge(
-                            edge_id=edge_id,
-                            edge_type=edge_type,
-                            edge_key='',
-                            local_ip=local_ip,
-                            public_ip=public_ip,
-                            status=EDGE_STATUS_ONLINE,
-                            confirmed=99,
-                            ingress_id=self.ingress_id,
-                            last_online_time=now,
-                            last_offline_time=now
-                        )
-                        db.add(edge)
-                        logger.info(f"New edge {edge_id} auto-registered: status=online, confirmed=99 (pending)")
-                    else:
-                        # 已存在边缘，更新状态
-                        edge = db.query(Edge).filter(Edge.edge_id == edge_id).first()
-                        if edge and edge.confirmed != 0:  # 非黑名单边缘才更新
-                            edge.status = EDGE_STATUS_ONLINE
-                            edge.last_online_time = now
-                            edge.last_offline_time = now
-                            edge.ingress_id = self.ingress_id
-                            logger.info(f"Updated edge {edge_id} status to online (confirmed={edge.confirmed})")
-
-                    db.commit()
-                finally:
-                    db.close()
+            await asyncio.to_thread(
+                self._sync_upsert_edge_online, edge_id, edge_type, local_ip, public_ip, now
+            )
+            logger.info(f"Updated edge {edge_id} status to online")
 
         except Exception as e:
             logger.error(f"Error updating edge online for {edge_id}: {type(e).__name__}: {e}", exc_info=True)
@@ -543,27 +576,11 @@ class IngressClient:
         """Handle edge.offline request from ingress (with confirmation response).
 
         更新数据库中的边缘状态为离线，并发送确认响应给 Ingress。
-        使用数据库锁保护并发更新。
+        DB 操作放工作线程执行，避免阻塞事件循环。
         """
         try:
-            from database import get_db, get_db_lock, Edge, EDGE_STATUS_OFFLINE
-
-            # 使用数据库锁保护并发更新
-            with get_db_lock():
-                db = get_db()
-                try:
-                    edge = db.query(Edge).filter(Edge.edge_id == edge_id).first()
-
-                    if edge:
-                        edge.status = EDGE_STATUS_OFFLINE
-                        edge.last_offline_time = datetime.utcnow()
-                        edge.updated_at = datetime.utcnow()
-                        db.commit()
-                        logger.info(f"Updated edge {edge_id} status to offline")
-                    else:
-                        logger.warning(f"Edge {edge_id} not found in database")
-                finally:
-                    db.close()
+            # DB 操作放工作线程执行，避免阻塞事件循环（保持消息交互全异步）
+            await asyncio.to_thread(self._sync_mark_edge_offline, edge_id)
 
             # 发送确认响应给 Ingress
             response = {
@@ -592,65 +609,76 @@ class IngressClient:
         """Notify manager that a edge is offline (called by ingress).
 
         直接更新数据库，不通过 HTTP API。
-        使用数据库锁保护并发更新。
+        DB 操作放工作线程执行，避免阻塞事件循环。
         """
         try:
-            from database import get_db, get_db_lock, Edge, EDGE_STATUS_OFFLINE
-
-            # 使用数据库锁保护并发更新
-            with get_db_lock():
-                db = get_db()
-                try:
-                    edge = db.query(Edge).filter(Edge.edge_id == edge_id).first()
-
-                    if edge:
-                        edge.status = EDGE_STATUS_OFFLINE
-                        edge.last_offline_time = datetime.utcnow()
-                        edge.updated_at = datetime.utcnow()
-                        db.commit()
-                        logger.info(f"Updated edge {edge_id} status to offline")
-                finally:
-                    db.close()
+            await asyncio.to_thread(self._sync_mark_edge_offline, edge_id)
 
         except Exception as e:
             logger.error(f"Error updating edge offline for {edge_id}: {type(e).__name__}: {e}", exc_info=True)
+
+    def _sync_mark_edge_offline(self, edge_id: str):
+        """(同步，运行在工作线程) 将指定 edge 标记为离线。"""
+        from database import get_db, get_db_lock, Edge, EDGE_STATUS_OFFLINE
+
+        # 使用数据库锁保护并发更新
+        with get_db_lock():
+            db = get_db()
+            try:
+                edge = db.query(Edge).filter(Edge.edge_id == edge_id).first()
+
+                if edge:
+                    edge.status = EDGE_STATUS_OFFLINE
+                    edge.last_offline_time = datetime.utcnow()
+                    edge.updated_at = datetime.utcnow()
+                    db.commit()
+                    logger.info(f"Updated edge {edge_id} status to offline")
+                else:
+                    logger.warning(f"Edge {edge_id} not found in database")
+            finally:
+                db.close()
 
     async def _notify_ingress_offline(self):
         """Notify manager that an ingress is offline, update all its edges to offline.
 
         当 ingress 离线时，该 ingress 上的所有边缘都应该被标记为离线。
         直接更新数据库，不通过 HTTP API。
-        使用数据库锁保护并发更新。
+        DB 操作放工作线程执行，避免阻塞事件循环。
         """
         logger.info(f"Notifying manager that ingress {self.ingress_id} is offline, updating all edges")
         try:
-            from database import get_db, get_db_lock, Edge, EDGE_STATUS_OFFLINE, EDGE_STATUS_ONLINE
-
-            # 使用数据库锁保护并发更新
-            with get_db_lock():
-                db = get_db()
-                try:
-                    # 批量更新该 ingress 上的所有在线边缘为离线
-                    edges = db.query(Edge).filter(
-                        Edge.ingress_id == self.ingress_id,
-                        Edge.status == EDGE_STATUS_ONLINE
-                    ).all()
-
-                    count = 0
-                    now = datetime.utcnow()
-                    for edge in edges:
-                        edge.status = EDGE_STATUS_OFFLINE
-                        edge.last_offline_time = now
-                        edge.updated_at = now
-                        count += 1
-
-                    db.commit()
-                    logger.info(f"Updated {count} edge(s) on ingress {self.ingress_id} to offline (ingress offline)")
-                finally:
-                    db.close()
+            # DB 操作放工作线程执行，避免阻塞事件循环（保持消息交互全异步）
+            await asyncio.to_thread(self._sync_mark_ingress_offline)
 
         except Exception as e:
             logger.error(f"Error updating ingress offline for {self.ingress_id}: {type(e).__name__}: {e}", exc_info=True)
+
+    def _sync_mark_ingress_offline(self):
+        """(同步，运行在工作线程) 将本 ingress 上的所有在线 edge 批量标记为离线。"""
+        from database import get_db, get_db_lock, Edge, EDGE_STATUS_OFFLINE, EDGE_STATUS_ONLINE
+
+        # 使用数据库锁保护并发更新
+        with get_db_lock():
+            db = get_db()
+            try:
+                # 批量更新该 ingress 上的所有在线边缘为离线
+                edges = db.query(Edge).filter(
+                    Edge.ingress_id == self.ingress_id,
+                    Edge.status == EDGE_STATUS_ONLINE
+                ).all()
+
+                count = 0
+                now = datetime.utcnow()
+                for edge in edges:
+                    edge.status = EDGE_STATUS_OFFLINE
+                    edge.last_offline_time = now
+                    edge.updated_at = now
+                    count += 1
+
+                db.commit()
+                logger.info(f"Updated {count} edge(s) on ingress {self.ingress_id} to offline (ingress offline)")
+            finally:
+                db.close()
 
     async def send_message(self, message: Dict) -> bool:
         """Send a message to the ingress."""
@@ -665,6 +693,84 @@ class IngressClient:
             logger.error(f"Error sending message to ingress {self.ingress_id}: {e}")
             self.connected = False
             return False
+
+    def send_message_threadsafe(self, message: Dict) -> bool:
+        """Send a message to the ingress from another thread (thread-safe).
+        
+        Uses call_soon_threadsafe to schedule the send in the correct event loop.
+        """
+        if not self._loop:
+            logger.error(f"Cannot send message: event loop not initialized")
+            return False
+        
+        if not self.connected or not self.websocket:
+            logger.warning(f"Cannot send message to ingress {self.ingress_id}: not connected")
+            return False
+        
+        # 使用线程安全的方式在正确的 event loop 中执行
+        future = asyncio.run_coroutine_threadsafe(self.websocket.send(json.dumps(message)), self._loop)
+        
+        try:
+            # 等待发送完成（最多 5 秒超时）
+            future.result(timeout=5)
+            return True
+        except Exception as e:
+            logger.error(f"Error sending message to ingress {self.ingress_id}: {e}")
+            self.connected = False
+            return False
+
+    def generate_request_id(self) -> int:
+        """Generate a unique request ID for JSON-RPC 2.0 requests."""
+        self._query_id_counter += 1
+        # 使用简单的递增 ID，配合时间戳避免冲突
+        import time
+        return int(time.time() * 1000) % (2**31) + self._query_id_counter
+
+    async def send_message_and_wait(self, message: Dict, timeout: int = 30) -> Optional[Dict]:
+        """Send a JSON-RPC 2.0 message and wait for response.
+        
+        Args:
+            message: JSON-RPC 2.0 消息（包含 id 字段）
+            timeout: 超时时间（秒）
+            
+        Returns:
+            响应消息字典，或 None（超时/错误）
+        """
+        if not self.connected or not self.websocket:
+            logger.warning(f"Cannot send message to ingress {self.ingress_id}: not connected")
+            return None
+        
+        # 创建 Future 对象用于接收响应
+        future = asyncio.Future()
+        req_id = message.get('id')
+        
+        if req_id is None:
+            logger.error("Message without id, cannot wait for response")
+            return None
+        
+        # 存储 Future 对象
+        if not hasattr(self, '_response_futures'):
+            self._response_futures = {}
+        self._response_futures[req_id] = future
+        
+        try:
+            # 发送消息
+            await self.websocket.send(json.dumps(message))
+            
+            # 等待响应（带超时）
+            try:
+                response = await asyncio.wait_for(future, timeout=timeout)
+                return response
+            except asyncio.TimeoutError:
+                logger.warning(f"Message timeout for ingress {self.ingress_id}, req_id={req_id}")
+                return None
+        except Exception as e:
+            logger.error(f"Error sending message to ingress {self.ingress_id}: {e}")
+            self.connected = False
+            return None
+        finally:
+            # 清理 Future 对象
+            self._response_futures.pop(req_id, None)
 
     async def _close(self):
         """Close the WebSocket connection."""
@@ -695,6 +801,35 @@ class IngressClient:
                 return False
 
         return self.connected
+
+    def query_edge_config(self, edge_id: str, timeout: int = 10) -> Optional[Dict]:
+        """线程安全地同步查询某个 edge 的 frpc 配置 (edge.config.query)。
+
+        通过 run_coroutine_threadsafe 把异步请求投递到 ingress 连接所属的事件循环
+        (self._loop), 避免在独立新事件循环中跨 loop 调用 websocket.send 导致的
+        挂起/超时(既有的 refresh_config 异步线程即因此出现数秒~30s 的回填延迟)。
+        """
+        if not self.connected or not self._loop or not self.websocket:
+            logger.warning(f"Cannot query config for edge {edge_id} from ingress {self.ingress_id}: not connected")
+            return None
+        try:
+            query_msg = {
+                'jsonrpc': '2.0',
+                'method': 'edge.config.query',
+                'params': {'edge_id': edge_id},
+                'id': self.generate_request_id()
+            }
+            future = asyncio.run_coroutine_threadsafe(
+                self.send_message_and_wait(query_msg, timeout=timeout),
+                self._loop
+            )
+            return future.result(timeout=timeout + 5)
+        except asyncio.TimeoutError:
+            logger.error(f"Config query timeout for edge {edge_id} on ingress {self.ingress_id}")
+            return None
+        except Exception as e:
+            logger.error(f"Error querying config for edge {edge_id}: {e}", exc_info=True)
+            return None
 
     def query_edge_list(self, offset: int = 0, limit: int = None) -> Optional[Dict]:
         """Query edge list from ingress (synchronous wrapper for async method).

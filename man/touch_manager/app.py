@@ -9,7 +9,7 @@ Main application entry point.
 import os
 import sys
 import logging
-from flask import Flask, render_template
+from flask import Flask, render_template, request
 from flask_cors import CORS
 
 from config import Config
@@ -58,6 +58,25 @@ def create_app(config_class=Config):
     def edges_page():
         """边缘列表页面"""
         return render_template('edges.html')
+
+    @app.route('/edges/config')
+    def edge_config_page():
+        """边缘远程配置编辑页面（第三阶段 frpc 配置界面）"""
+        edge_id = request.args.get('edge_id', '')
+        from database import Edge, get_db
+        db = get_db()
+        try:
+            edge = db.query(Edge).filter(Edge.edge_id == edge_id).first()
+            exists = edge is not None
+            edge_online = (edge is not None) and (edge.status == 1)
+        finally:
+            db.close()
+        if not edge_id or not exists:
+            return render_template('edge_config.html', edge_id=edge_id,
+                                   edge_exists=False, message='Edge not found'), 404
+        return render_template('edge_config.html', edge_id=edge_id,
+                               edge_exists=True, edge_online=edge_online,
+                               message='')
     
     @app.route('/ingresses')
     def ingresses_page():

@@ -80,7 +80,7 @@ test_list_edges() {
         -H "Content-Type: application/json" \
         -d '{}')
 
-    if echo "$response" | grep -q '"code": 0'; then
+    if echo "$response" | grep -qE '"code": ?0'; then
         if echo "$response" | grep -q '"edges":'; then
             print_pass "查询边缘列表成功"
             add_to_report "[PASS] test_list_edges"
@@ -100,7 +100,7 @@ test_list_edges_pagination() {
         -H "Content-Type: application/json" \
         -d '{"page": 1, "page_size": 10}')
 
-    if echo "$response" | grep -q '"code": 0'; then
+    if echo "$response" | grep -qE '"code": ?0'; then
         print_pass "分页查询成功"
         add_to_report "[PASS] test_list_edges_pagination"
         return 0
@@ -121,14 +121,14 @@ test_confirm_edge() {
         -H "Content-Type: application/json" \
         -d "{\"edge_id\": \"$edge_id\"}")
 
-    if echo "$response" | grep -q '"code": 0'; then
+    if echo "$response" | grep -qE '"code": ?0'; then
         print_pass "确认边缘成功"
         add_to_report "[PASS] test_confirm_edge"
         return 0
     fi
 
     # 如果边缘不存在，也算通过（404 是预期的）
-    if echo "$response" | grep -q '"code": 40002'; then
+    if echo "$response" | grep -qE '"code": ?40002'; then
         print_pass "边缘不存在（预期行为）"
         add_to_report "[PASS] test_confirm_edge (edge not found)"
         return 0
@@ -148,14 +148,14 @@ test_reject_edge() {
         -H "Content-Type: application/json" \
         -d "{\"edge_id\": \"$edge_id\"}")
 
-    if echo "$response" | grep -q '"code": 0'; then
+    if echo "$response" | grep -qE '"code": ?0'; then
         print_pass "拒绝边缘成功"
         add_to_report "[PASS] test_reject_edge"
         return 0
     fi
 
     # 如果边缘不存在，也算通过
-    if echo "$response" | grep -q '"code": 40002'; then
+    if echo "$response" | grep -qE '"code": ?40002'; then
         print_pass "边缘不存在（预期行为）"
         add_to_report "[PASS] test_reject_edge (edge not found)"
         return 0
@@ -175,14 +175,14 @@ test_delete_edge() {
         -H "Content-Type: application/json" \
         -d "{\"edge_id\": \"$edge_id\"}")
 
-    if echo "$response" | grep -q '"code": 0'; then
+    if echo "$response" | grep -qE '"code": ?0'; then
         print_pass "删除边缘成功"
         add_to_report "[PASS] test_delete_edge"
         return 0
     fi
 
     # 如果边缘不存在，也算通过
-    if echo "$response" | grep -q '"code": 40002'; then
+    if echo "$response" | grep -qE '"code": ?40002'; then
         print_pass "边缘不存在（预期行为）"
         add_to_report "[PASS] test_delete_edge (edge not found)"
         return 0
@@ -200,7 +200,7 @@ test_batch_confirm() {
         -H "Content-Type: application/json" \
         -d '{"edge_ids": ["edge-test-004", "edge-test-005", "edge-test-006"]}')
 
-    if echo "$response" | grep -q '"code": 0'; then
+    if echo "$response" | grep -qE '"code": ?0'; then
         print_pass "批量确认成功"
         add_to_report "[PASS] test_batch_confirm"
         return 0
@@ -218,7 +218,7 @@ test_batch_reject() {
         -H "Content-Type: application/json" \
         -d '{"edge_ids": ["edge-test-007", "edge-test-008", "edge-test-009"]}')
 
-    if echo "$response" | grep -q '"code": 0'; then
+    if echo "$response" | grep -qE '"code": ?0'; then
         print_pass "批量拒绝成功"
         add_to_report "[PASS] test_batch_reject"
         return 0
@@ -237,7 +237,7 @@ test_edge_not_found() {
         -H "Content-Type: application/json" \
         -d '{"edge_id": "non-existent-edge"}')
 
-    if echo "$response" | grep -q '"code": 40002'; then
+    if echo "$response" | grep -qE '"code": ?40002'; then
         print_pass "正确返回 404 错误"
         add_to_report "[PASS] test_edge_not_found"
         return 0
@@ -264,7 +264,7 @@ test_list_ingresses() {
         -H "Content-Type: application/json" \
         -d '{}')
 
-    if echo "$response" | grep -q '"code": 0'; then
+    if echo "$response" | grep -qE '"code": ?0'; then
         if echo "$response" | grep -q '"ingresses":'; then
             print_pass "查询 Ingress 列表成功"
             add_to_report "[PASS] test_list_ingresses"
@@ -289,7 +289,7 @@ test_add_ingress() {
             "enabled": true
         }')
 
-    if echo "$response" | grep -q '"code": 0'; then
+    if echo "$response" | grep -qE '"code": ?0'; then
         print_pass "添加 Ingress 成功"
         add_to_report "[PASS] test_add_ingress"
         return 0
@@ -318,14 +318,14 @@ test_update_ingress() {
             "enabled": false
         }')
 
-    if echo "$response" | grep -q '"code": 0'; then
+    if echo "$response" | grep -qE '"code": ?0'; then
         print_pass "更新 Ingress 成功"
         add_to_report "[PASS] test_update_ingress"
         return 0
     fi
 
     # 如果不存在，也算通过
-    if echo "$response" | grep -q '"code": 40002'; then
+    if echo "$response" | grep -qE '"code": ?40002'; then
         print_pass "Ingress 不存在（预期行为）"
         add_to_report "[PASS] test_update_ingress (not found)"
         return 0
@@ -343,14 +343,14 @@ test_delete_ingress() {
         -H "Content-Type: application/json" \
         -d '{"ingress_id": "ingress-test-001"}')
 
-    if echo "$response" | grep -q '"code": 0'; then
+    if echo "$response" | grep -qE '"code": ?0'; then
         print_pass "删除 Ingress 成功"
         add_to_report "[PASS] test_delete_ingress"
         return 0
     fi
 
     # 如果不存在，也算通过
-    if echo "$response" | grep -q '"code": 40002'; then
+    if echo "$response" | grep -qE '"code": ?40002'; then
         print_pass "Ingress 不存在（预期行为）"
         add_to_report "[PASS] test_delete_ingress (not found)"
         return 0
@@ -368,7 +368,7 @@ test_health() {
     
     response=$(curl -s "$MANAGER_URL/health")
     
-    if echo "$response" | grep -q '"status": "ok"'; then
+    if echo "$response" | grep -qE '"status": ?"ok"'; then
         print_pass "健康检查通过"
         add_to_report "[PASS] test_health"
         return 0
@@ -384,8 +384,8 @@ test_api_info() {
     
     response=$(curl -s "$MANAGER_URL/api")
     
-    if echo "$response" | grep -q '"status": "ok"'; then
-        if echo "$response" | grep -q '"service": "touch_manager"'; then
+    if echo "$response" | grep -qE '"status": ?"ok"'; then
+        if echo "$response" | grep -qE '"service": ?"touch_manager"'; then
             print_pass "API 信息正确"
             add_to_report "[PASS] test_api_info"
             return 0

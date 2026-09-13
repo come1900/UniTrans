@@ -204,6 +204,15 @@ void CFunRegisterSvr::handle_receive(int client_id, const char *data, size_t len
 
     // 如果是响应（包含 result 或 error），先处理
     if (ComeJsonCodec::isJsonRpcResponse(json_str)) {
+        // 检查是否为 AckConfigUpdate 响应（frpc 远程配置响应）
+        AckConfigUpdate ack;
+        if (ComeJsonCodec::decode(json_str, ack)) {
+            // 透传 AckConfigUpdate 给 Manager
+            handle_config_ack_jsonrpc2(client_id, json_str);
+            return;
+        }
+
+        // 处理其他响应（如 edge.online 响应）
         JsonValue root = JsonValue::parse(json_str);
         JsonValue result_obj = root.getObject("result");
         if (!result_obj.isNull() && result_obj.contains("edge_id")) {
@@ -252,13 +261,19 @@ void CFunRegisterSvr::handle_receive(int client_id, const char *data, size_t len
         if (ComeJsonCodec::decodeJsonRpcRequest(json_str, msg, method, id)) {
             handle_kick_device_jsonrpc2(client_id, msg, id);
         }
+    } else if (method == "edge.config.update") {
+        // frpc 远程配置下发：透传给 Edge
+        handle_config_update_jsonrpc2(client_id, json_str, id);
+    } else if (method == "edge.config.query") {
+        // frpc 配置查询：透传给 Edge
+        handle_config_query_jsonrpc2(client_id, json_str, id);
     } else if (method == COME_METHOD_EDGE_HEARTBEAT) {
         EdgeHeartbeat msg;
         // 心跳是 JSON-RPC 2.0 通知格式（无 id），需要从 params 中解码
         std::string dummy_method;
         int64_t dummy_id;
         if (ComeJsonCodec::decodeJsonRpcNotification(json_str, msg, dummy_method, dummy_id)) {
-            ez_printf_info("touch_ingress: [HEARTBEAT] Decoded successfully [edge_id=%s, access_token=%s]\n", 
+            ez_printf_info("touch_ingress: [HEARTBEAT] Decoded successfully [edge_id=%s, access_token=%s]\n",
                    msg.id.c_str(), msg.access_token.substr(0, 20).c_str());
             handle_device_heartbeat_jsonrpc2(client_id, msg);
         } else {
@@ -619,6 +634,190 @@ void CFunRegisterSvr::handle_kick_device_jsonrpc2(int client_id, const ManagerEd
 
     // 然后踢掉设备
     kick_device(edge_id);
+}
+
+// ==============================
+// frpc 远程配置透传处理
+// ==============================
+
+void CFunRegisterSvr::handle_config_update_jsonrpc2(int client_id, const std::string& json_str, int64_t id)
+{
+    // client_id 是 Manager 的 client_id
+    // 需要将配置消息透传给 Edge
+
+    uint64_t _tv_begin = SystemGetMSCount();
+
+    ez_printf_info("touch_ingress: [CONFIG.UPDATE] Received edge.config.update from manager [client_id=%d, json=%.100s]\n",
+           client_id, json_str.c_str());
+
+    // 1. 解析 ConfigUpdate_tunnelService 消息，获取 edge_id
+    ConfigUpdate_tunnelService configMsg;
+    if (!ComeJsonCodec::decode(json_str, configMsg)) {
+        ez_printf_warning("touch_ingress: [CONFIG.UPDATE] Failed to decode edge.config.update from manager (client_id=%d)\n", client_id);
+        // 不返回错误，因为这是透传失败
+        return;
+    }
+
+    std::string edge_id = configMsg.edge_id;
+    if (edge_id.empty()) {
+        ez_printf_warning("touch_ingress: [CONFIG.UPDATE] edge.config.update without edge_id from manager (client_id=%d)\n", client_id);
+        return;
+    }
+
+    ez_printf_info("touch_ingress: [CONFIG.UPDATE] Decoded edge_id=%s from config message\n", edge_id.c_str());
+
+    // 2. 查找 edge_id 对应的 client_id
+    int edge_client_id = EZ_WS_SERVER_INVALID_CLIENT_ID;
+    ez_printf_info("touch_ingress: [CONFIG.UPDATE] Searching for edge %s in m_online_edges (size=%zu)\n",
+           edge_id.c_str(), m_online_edges.size());
+
+    for (auto it = m_online_edges.begin(); it != m_online_edges.end(); ++it) {
+        ez_printf_info("touch_ingress: [CONFIG.UPDATE] Checking m_online_edges entry: client_id=%d, edge_id=%s\n",
+               it->first, it->second.edge_id.c_str());
+        if (it->second.edge_id == edge_id) {
+            edge_client_id = it->first;
+            ez_printf_info("touch_ingress: [CONFIG.UPDATE] Found edge %s at client_id=%d\n", edge_id.c_str(), edge_client_id);
+            break;
+        }
+    }
+
+    if (edge_client_id == EZ_WS_SERVER_INVALID_CLIENT_ID) {
+        ez_printf_warning("touch_ingress: [CONFIG.UPDATE] Edge %s not found for config update (manager client_id=%d, online_edges=%zu)\n",
+               edge_id.c_str(), client_id, m_online_edges.size());
+        ez_printf_warning("touch_ingress: [CONFIG.UPDATE] Edge %s is OFFLINE - config will be stored in database and sent when edge connects\n", edge_id.c_str());
+        // Edge 不在线，无法透传
+        // TODO: 可以考虑返回错误给 Manager
+        return;
+    }
+
+    // 3. 透传配置消息给 Edge
+    ez_printf_info("touch_ingress: [CONFIG.UPDATE] About to forward config to edge %s (client_id=%d)\n", edge_id.c_str(), edge_client_id);
+    g_DevWsRegisterSvr.SendText(edge_client_id, json_str.c_str(), json_str.length());
+    ez_printf_info("touch_ingress: [CONFIG.UPDATE] Forwarded edge.config.update to edge %s (edge_client_id=%d)\n",
+           edge_id.c_str(), edge_client_id);
+
+    // 4. 立即返回确认响应给 Manager（异步处理，不等 Edge 响应）
+    // 使用 buildJsonRpcSuccess 构造 JSON-RPC 2.0 响应
+    JsonValue result_obj;
+    result_obj.setInt("code", 0);
+    result_obj.setString("message", "Config message forwarded to edge");
+    result_obj.setString("edge_id", edge_id);
+    result_obj.setString("config_type", configMsg.config_type);
+    result_obj.setBool("applied", false);
+    result_obj.setInt("version", configMsg.version);
+    result_obj.setString("result", "forwarded");
+
+    JsonValue id_val = JsonValue::createInt64(id);
+
+    std::string ack_json = ComeJsonCodec::buildJsonRpcSuccess(result_obj, id_val);
+    if (!ack_json.empty()) {
+        ez_printf_info("touch_ingress: [CONFIG.UPDATE] Sending ack to manager (id=%ld, edge_id=%s)\n", (long)id, edge_id.c_str());
+        g_DevWsRegisterSvr.SendText(m_manager_client_id, ack_json.c_str(), ack_json.length());
+        ez_printf_info("touch_ingress: [CONFIG.UPDATE] Sent ack to manager (id=%ld, edge_id=%s)\n", (long)id, edge_id.c_str());
+    } else {
+        ez_printf_warning("touch_ingress: [CONFIG.UPDATE] Failed to build ack JSON for manager\n");
+    }
+
+    uint64_t _tv_end = SystemGetMSCount();
+    long _ms = (long)(_tv_end - _tv_begin);
+    ez_printf_info("touch_ingress: [LATENCY] handle_config_update_jsonrpc2 (edge_id=%s) handled in %ld ms\n", edge_id.c_str(), _ms);
+}
+
+void CFunRegisterSvr::handle_config_ack_jsonrpc2(int client_id, const std::string& json_str)
+{
+    // client_id 是 Edge 的 client_id
+    // 需要将 AckConfigUpdate 响应透传给 Manager
+
+    uint64_t _tv_begin = SystemGetMSCount();
+
+    if (!IsManagerConnected()) {
+        ez_printf_warning("touch_ingress: No manager connected, cannot forward config ack\n");
+        return;
+    }
+
+    // 直接透传给 Manager
+    g_DevWsRegisterSvr.SendText(m_manager_client_id, json_str.c_str(), json_str.length());
+    ez_printf_info("touch_ingress: Forwarded config ack to manager\n");
+
+    uint64_t _tv_end = SystemGetMSCount();
+    long _ms = (long)(_tv_end - _tv_begin);
+    ez_printf_info("touch_ingress: [LATENCY] handle_config_ack_jsonrpc2 forwarded in %ld ms\n", _ms);
+}
+
+// 处理配置查询请求：透传给 Edge
+void CFunRegisterSvr::handle_config_query_jsonrpc2(int client_id, const std::string& json_str, int64_t id)
+{
+    // client_id 是 Manager 的 client_id
+    // 需要将查询请求透传给 Edge
+
+    uint64_t _tv_begin = SystemGetMSCount();
+
+    ez_printf_info("touch_ingress: [CONFIG.QUERY] Received edge.config.query from manager [client_id=%d, json=%.100s]\n",
+           client_id, json_str.c_str());
+
+    // 1. 解析查询请求，获取 edge_id
+    JsonValue json = JsonValue::parse(json_str);
+    if (json.isNull()) {
+        ez_printf_warning("touch_ingress: [CONFIG.QUERY] Failed to parse JSON from manager (client_id=%d)\n", client_id);
+        return;
+    }
+
+    // 从 params 中获取 edge_id
+    std::string edge_id;
+    if (json.contains("params")) {
+        JsonValue params = json.getObject("params");
+        if (params.contains("edge_id")) {
+            edge_id = params.getString("edge_id");
+        }
+    }
+
+    if (edge_id.empty()) {
+        ez_printf_warning("touch_ingress: [CONFIG.QUERY] edge.config.query without edge_id from manager (client_id=%d)\n", client_id);
+        return;
+    }
+
+    ez_printf_info("touch_ingress: [CONFIG.QUERY] Decoded edge_id=%s from query request\n", edge_id.c_str());
+
+    // 2. 查找 edge_id 对应的 client_id
+    int edge_client_id = EZ_WS_SERVER_INVALID_CLIENT_ID;
+    for (auto it = m_online_edges.begin(); it != m_online_edges.end(); ++it) {
+        if (it->second.edge_id == edge_id) {
+            edge_client_id = it->first;
+            break;
+        }
+    }
+
+    if (edge_client_id == EZ_WS_SERVER_INVALID_CLIENT_ID) {
+        ez_printf_warning("touch_ingress: [CONFIG.QUERY] Edge %s not found for query (manager client_id=%d, online_edges=%zu)\n",
+               edge_id.c_str(), client_id, m_online_edges.size());
+        ez_printf_warning("touch_ingress: [CONFIG.QUERY] Edge %s is OFFLINE - cannot query config\n", edge_id.c_str());
+
+        // 返回错误响应给 Manager
+        JsonValue error_result = JsonValue::createObject();
+        error_result.setInt("code", -1);
+        error_result.setString("message", "Edge offline");
+        error_result.setString("edge_id", edge_id);
+
+        JsonValue id_val = JsonValue::createInt64(id);
+
+        std::string err_json = ComeJsonCodec::buildJsonRpcError(-1, "Edge offline", id_val);
+        if (!err_json.empty()) {
+            g_DevWsRegisterSvr.SendText(client_id, err_json.c_str(), err_json.length());
+            ez_printf_info("touch_ingress: [CONFIG.QUERY] Sent error response to manager (edge %s offline)\n", edge_id.c_str());
+        }
+        return;
+    }
+
+    // 3. 透传查询请求给 Edge
+    ez_printf_info("touch_ingress: [CONFIG.QUERY] Forwarding query to edge %s (client_id=%d)\n", edge_id.c_str(), edge_client_id);
+    g_DevWsRegisterSvr.SendText(edge_client_id, json_str.c_str(), json_str.length());
+    ez_printf_info("touch_ingress: [CONFIG.QUERY] Forwarded edge.config.query to edge %s\n", edge_id.c_str());
+
+    // 注意：不等 Edge 响应，由 Edge 直接回复 Manager
+
+    uint64_t _tv_end = SystemGetMSCount();
+    long _ms = (long)(_tv_end - _tv_begin);
+    ez_printf_info("touch_ingress: [LATENCY] handle_config_query_jsonrpc2 (edge_id=%s) handled in %ld ms\n", edge_id.c_str(), _ms);
 }
 
 // ==============================

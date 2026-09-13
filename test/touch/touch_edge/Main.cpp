@@ -27,9 +27,11 @@
 #include "EZThread.h"
 #include "EZTimer.h"
 
+#include <ezutil/ez_log.h>
+
 // 默认参数宏定义
-// #define DEFAULT_INGRESS_HOST    "127.0.0.1"
-#define DEFAULT_INGRESS_HOST    "47.100.49.48"
+#define DEFAULT_INGRESS_HOST    "127.0.0.1"
+// #define DEFAULT_INGRESS_HOST    "47.100.49.48"
 #define DEFAULT_INGRESS_PORT    54321
 #define DEFAULT_EDGE_ID         "edge001"
 #define DEFAULT_EDGE_KEY        "key001"
@@ -146,6 +148,11 @@ int main(int argc, char *argv[])
         print_usage(argv[0]);
         return 0;
     }
+
+    const char *fname = "_edge.log";
+    const int iLevel = EZ_LOG_TO_FILE_AND_STDOUT*10+EZ_LOG_LEVEL_DEBUG;
+    ez_log_structure(fname, 3, 3*1024*1024);
+    ez_log_set_level(iLevel);
 
     // 应用参数（选项参数优先，位置参数次之）
     const char *ingress_host = arg_host ? arg_host :

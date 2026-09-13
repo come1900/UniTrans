@@ -22,6 +22,8 @@
 #include <string>
 #include "EZThread.h"
 #include "EZSignals.h"
+#include <api_ezthread.h>
+
 #include "ez_wsserver-native.h"
 
 #define g_DevWsRegisterSvr (*CDevWsRegisterSvr::instance())

@@ -351,7 +351,7 @@ int test_ConfigUpdate_tunnelService() {
     CLocalManagement localManagement("127.0.0.1", 17400);
     
     // 创建目标服务配置
-    CTargetService targetService("127.0.0.1", 3000);
+    CTargetService targetService("127.0.0.1", 55555);
     
     // 创建访问策略
     CAccessPolicy policy1("w-tcp-51422", "tcp", targetService, 51422, "pss service");
@@ -410,7 +410,7 @@ int test_ConfigUpdate_tunnelService() {
     assert(decoded.configContent.services[0].accessPolicies.size() == 1);
     assert(decoded.configContent.services[0].accessPolicies[0].policyId == "w-tcp-51422");
     assert(decoded.configContent.services[0].accessPolicies[0].targetService.ip == "127.0.0.1");
-    assert(decoded.configContent.services[0].accessPolicies[0].targetService.port == 3000);
+    assert(decoded.configContent.services[0].accessPolicies[0].targetService.port == 55555);
     assert(decoded.configContent.services[0].accessPolicies[0].exposedPort == 51422);
     assert(decoded.configContent.services[0].accessPolicies[0].description == "pss service");
 
@@ -461,7 +461,7 @@ int test_toFrpcConfig() {
     CLocalManagement localManagement("127.0.0.1", 17400);
 
     // 创建目标服务配置
-    CTargetService targetService("127.0.0.1", 3000);
+    CTargetService targetService("127.0.0.1", 55555);
 
     // 创建访问策略
     CAccessPolicy policy1("w-tcp-51422", "tcp", targetService, 51422, "pss service");
@@ -513,7 +513,7 @@ int test_toFrpcConfig() {
     assert(frpcCfg.proxies[0].name == "w-tcp-51422");
     assert(frpcCfg.proxies[0].type == "tcp");
     assert(frpcCfg.proxies[0].localIP == "127.0.0.1");
-    assert(frpcCfg.proxies[0].localPort == 3000);
+    assert(frpcCfg.proxies[0].localPort == 55555);
     assert(frpcCfg.proxies[0].remotePort == 51422);
 
     if (g_details || showThisDetails) {
@@ -558,7 +558,7 @@ int test_toFrpcConfig() {
     assert(svc.accessPolicies[0].policyId == "w-tcp-51422");
     assert(svc.accessPolicies[0].protocol == "tcp");
     assert(svc.accessPolicies[0].targetService.ip == "127.0.0.1");
-    assert(svc.accessPolicies[0].targetService.port == 3000);
+    assert(svc.accessPolicies[0].targetService.port == 55555);
     assert(svc.accessPolicies[0].exposedPort == 51422);
 
     if (g_details || showThisDetails) {

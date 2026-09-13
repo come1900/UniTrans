@@ -220,6 +220,7 @@ void CDevWsRegisterSvr::ThreadProc()
     // 按照 ezsocket 库规范：循环调用 ez_ws_server_service_exec 处理事件
     // 参考：touch-svr-native.c 中的 ws_server_thread_func
     ez_printf_info("touch_ingress: WebSocket server thread started\n");
+    uint64_t _tv_ms_prev = SystemGetMSCount();
     while (m_bLoop) {
         if (m_ws_handle) {
             // 执行一次事件循环迭代
@@ -227,6 +228,13 @@ void CDevWsRegisterSvr::ThreadProc()
             // 返回 0 表示继续运行，-1 表示应该停止
             // 注意：为了快速响应停止信号，使用较小的超时时间（50ms）
             int ret = ez_ws_server_service_exec(m_ws_handle, 50);
+            uint64_t _tv_ms_cur = SystemGetMSCount();
+            long _iter_ms = (long)(_tv_ms_cur - _tv_ms_prev);
+            _tv_ms_prev = _tv_ms_cur;
+            // 事件循环迭代耗时超过阈值说明有某一步被阻塞（正常 idle 迭代 ~0ms）
+            if (_iter_ms > 300) {
+                ez_printf_warning("touch_ingress: [EVENTLOOP] service_exec iteration took %ld ms (阻塞检测), ret=%d\n", _iter_ms, ret);
+            }
             if (ret < 0) {
                 // 服务出错，打印日志并退出循环
                 ez_printf_error("touch_ingress: ez_ws_server_service_exec returned %d, stopping server loop\n", ret);

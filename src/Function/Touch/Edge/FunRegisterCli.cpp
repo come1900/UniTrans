@@ -20,8 +20,20 @@
 #include <string.h>
 #include <time.h>
 #include <stdlib.h>
+#include <sys/stat.h>  // for chmod
+#include <fstream>     // for file reading
 
 #include "../../../Logs.h"
+
+// 静态成员变量定义
+const std::string CFunRegisterCli::FRPC_CONFIG_DIR = "./shpc";
+
+// 该 edge 的 frpc 配置文件路径, 按 edge_id 命名以免多 edge 互相覆盖
+//   例如 edge_id=edge001 -> ./shpc/shpc.edge001.json
+std::string CFunRegisterCli::get_frpc_config_path() const
+{
+    return FRPC_CONFIG_DIR + "/shpc." + m_edge_id + ".json";
+}
 
 CFunRegisterCli::CFunRegisterCli(const std::string& edge_id, const std::string& edge_key,
                                  const std::string& edge_type)
@@ -190,15 +202,15 @@ void CFunRegisterCli::send_heartbeat()
     char timestamp[32];
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", gmtime(&now));
 
-    // 阶段1：使用 EdgeHeartbeat 数据结构构造 JSON-RPC 2.0 通知
+    // 阶段 1：使用 EdgeHeartbeat 数据结构构造 JSON-RPC 2.0 通知
     EdgeHeartbeat heartbeat;
     heartbeat.id = m_edge_id;
     heartbeat.access_token = m_token;  // 使用注册时获取的 token
     heartbeat.timestamp = timestamp;
-    
+
     // 使用 ComeJsonCodec 编码为 JSON-RPC 2.0 通知格式（无 id）
     std::string json_str = ComeJsonCodec::encodeJsonRpcNotification(heartbeat, COME_METHOD_EDGE_HEARTBEAT);
-    
+
     if (json_str.empty()) {
         ez_printf_error("Failed to encode heartbeat message\n");
         return;
@@ -247,29 +259,188 @@ void CFunRegisterCli::OnWebsocketNotify(CDevWsRegisterCli::SignalType sig_type, 
 
 void CFunRegisterCli::handle_receive(const void *data, size_t len)
 {
-    std::string json_str((const char *)data, len);
+    std::string jsonStr = std::string((const char*)data, len);
 
-    // JSON-RPC 2.0 格式处理
-    if (ComeJsonCodec::isResponse(json_str)) {
+    // 首先检查是否为 JSON-RPC 2.0 响应（注册响应、心跳响应等）
+    if (ComeJsonCodec::isResponse(jsonStr)) {
         // 尝试解码为 AckEdgeOnline（成功响应）
         AckEdgeOnline ack;
-        if (ComeJsonCodec::decodeJsonRpcResponse(json_str, ack)) {
+        if (ComeJsonCodec::decodeJsonRpcResponse(jsonStr, ack)) {
             // 成功响应：edge.online 的响应
             handle_register_ack_jsonrpc2(ack);
             return;
         }
-        
+
         // 尝试解码为错误响应
         int32_t error_code = 0;
         std::string error_msg;
-        if (ComeJsonCodec::decodeJsonRpcError(json_str, error_code, error_msg)) {
+        if (ComeJsonCodec::decodeJsonRpcError(jsonStr, error_code, error_msg)) {
             // 错误响应：注册失败
             handle_register_ack_jsonrpc2_error(error_code, error_msg);
             return;
         }
+        return;
     }
-    
-    // 心跳是通知，不会有响应，这里不需要处理
+
+    // 检查是否为 JSON-RPC 2.
+    if (ComeJsonCodec::isRequest(jsonStr)) {
+        // 提取请求 ID
+        int64_t req_id = ComeJsonCodec::extractJsonRpcId(jsonStr);
+
+        // 尝试解析 JSON 获取 method
+        JsonValue json = JsonValue::parse(jsonStr);
+        if (json.isNull()) {
+            ez_printf_warning("Failed to parse JSON request\n");
+            return;
+        }
+
+        std::string method = json.getString("method");
+        
+        // 处理 edge.config.query 查询请求
+        if (method == "edge.config.query") {
+            ez_printf_info("Received edge.config.query request [req_id=%ld]\n", (long)req_id);
+            
+            // 从 params 中获取 edge_id
+            std::string edge_id;
+            if (json.contains("params")) {
+                JsonValue params = json.getObject("params");
+                if (params.contains("edge_id")) {
+                    edge_id = params.getString("edge_id");
+                }
+            }
+            
+            // 验证 edge_id 是否匹配
+            if (!edge_id.empty() && edge_id != m_edge_id) {
+                ez_printf_warning("edge.config.query: edge_id mismatch (expected=%s, got=%s)\n", m_edge_id.c_str(), edge_id.c_str());
+            }
+            
+            // 读取当前 frpc 配置文件
+            std::string config_file = get_frpc_config_path();
+            std::ifstream ifs(config_file);
+            if (!ifs.is_open()) {
+                ez_printf_error("Failed to open config file: %s\n", config_file.c_str());
+                send_config_query_error(req_id, -1, "Failed to read config file");
+                return;
+            }
+            
+            std::string config_json((std::istreambuf_iterator<char>(ifs)),
+                                     std::istreambuf_iterator<char>());
+            ifs.close();
+            
+            ez_printf_info("Read config from %s: %s\n", config_file.c_str(), config_json.c_str());
+            
+            // 构造查询响应：直接返回 frpc 配置 JSON
+            JsonValue result_obj = JsonValue::createObject();
+            result_obj.setString("edge_id", m_edge_id);
+            result_obj.setString("config_type", "tunnelService");
+            
+            // 解析 frpc JSON 并添加到 result 中
+            JsonValue frpc_json = JsonValue::parse(config_json);
+            if (!frpc_json.isNull()) {
+                result_obj.setObject("config", frpc_json);
+            } else {
+                ez_printf_warning("Failed to parse frpc config JSON for response\n");
+                result_obj.setString("config_error", "Failed to parse config file");
+            }
+            
+            // 构造 JSON-RPC 2.0 成功响应
+            JsonValue id_val = JsonValue::createInt64(req_id);
+            
+            std::string resp_json = ComeJsonCodec::buildJsonRpcSuccess(result_obj, id_val);
+            if (resp_json.empty()) {
+                ez_printf_error("Failed to build query response JSON\n");
+                return;
+            }
+            
+            // 发送响应
+            send_message(resp_json.c_str(), resp_json.length());
+            ez_printf_info("Sent config query response for edge %s\n", m_edge_id.c_str());
+            return;
+        }
+
+        // 尝试 decode 为 ConfigUpdate_tunnelService（配置更新）
+        ConfigUpdate_tunnelService configMsg;
+        if (ComeJsonCodec::decode(jsonStr, configMsg)) {
+            // 成功解析为配置消息
+            ez_printf_info("=== [CONFIG.UPDATE.RECV] Received ConfigUpdate_tunnelService for edge %s ===\n", configMsg.edge_id.c_str());
+            ez_printf_info("  - config_type: %s\n", configMsg.config_type.c_str());
+            ez_printf_info("  - version: %ld\n", (long)configMsg.version);
+            ez_printf_info("  - access_token: %s\n", configMsg.access_token.c_str());
+            ez_printf_info("  - configContent.services.size(): %zu\n", configMsg.configContent.services.size());
+            if (!configMsg.configContent.services.empty()) {
+                auto& svc = configMsg.configContent.services[0];
+                ez_printf_info("  - service[0].name: %s\n", svc.serviceName.c_str());
+                auto& ts = svc.tunnelService;
+                ez_printf_info("  - tunnelService.endpoint: %s:%d\n", ts.endpoint.host.c_str(), ts.endpoint.port);
+                ez_printf_info("  - tunnelService.localManagement: %s:%d\n", ts.localManagement.bindAddress.c_str(), ts.localManagement.bindPort);
+                ez_printf_info("  - tunnelService.security.authMethod: %s, enableTls: %d\n", ts.security.authMethod.c_str(), ts.security.enableTls);
+                ez_printf_info("  - service.accessPolicies.size(): %zu\n", svc.accessPolicies.size());
+                for (size_t i = 0; i < svc.accessPolicies.size(); i++) {
+                    auto& ap = svc.accessPolicies[i];
+                    ez_printf_info("    - accessPolicy[%zu]: %s, protocol=%s, targetService=%s:%d, exposedPort=%d\n",
+                                   i, ap.policyId.c_str(), ap.protocol.c_str(),
+                                   ap.targetService.ip.c_str(), ap.targetService.port, ap.exposedPort);
+                }
+            }
+
+            // 验证 edge_id 是否匹配
+            if (configMsg.edge_id != m_edge_id) {
+                ez_printf_error("Edge ID mismatch: expected %s, got %s\n", m_edge_id.c_str(), configMsg.edge_id.c_str());
+                send_config_ack_error(req_id, -1, "Edge ID mismatch");
+                return;
+            }
+
+            // 1. 转换为 FrpcConfig
+            FrpcConfig frpcCfg;
+            if (!ComeJsonCodec::toFrpcConfig(configMsg, frpcCfg)) {
+                ez_printf_error("Failed to convert ConfigUpdate to FrpcConfig\n");
+                send_config_ack_error(req_id, -2, "Failed to convert to FrpcConfig");
+                return;
+            }
+            
+            // 打印转换后的 frpc 配置
+            ez_printf_info("=== [CONFIG.UPDATE.CONVERT] Converted to FrpcConfig ===\n");
+            ez_printf_info("  - serverAddr: %s, serverPort: %d\n", frpcCfg.serverAddr.c_str(), frpcCfg.serverPort);
+            ez_printf_info("  - authMethod: %s, token: %s\n", frpcCfg.authMethod.c_str(), frpcCfg.token.c_str());
+            ez_printf_info("  - tlsEnable: %d\n", frpcCfg.tlsEnable);
+            ez_printf_info("  - webServerAddr: %s, webServerPort: %d\n", frpcCfg.webServerAddr.c_str(), frpcCfg.webServerPort);
+            ez_printf_info("  - proxies.size(): %zu\n", frpcCfg.proxies.size());
+            for (size_t i = 0; i < frpcCfg.proxies.size(); i++) {
+                auto& p = frpcCfg.proxies[i];
+                ez_printf_info("    - proxy[%zu]: name=%s, type=%s, localIP=%s, localPort=%d, remotePort=%d\n",
+                               i, p.name.c_str(), p.type.c_str(), p.localIP.c_str(), p.localPort, p.remotePort);
+            }
+            
+            // 2. 编码为 JSON 字符串
+            std::string frpcJson = ComeJsonCodec::encode(frpcCfg);
+            if (frpcJson.empty()) {
+                ez_printf_error("Failed to encode FrpcConfig to JSON\n");
+                send_config_ack_error(req_id, -3, "Failed to encode FrpcConfig");
+                return;
+            }
+
+            // 3. 写入 frpc 配置文件
+            if (!write_frpc_config_file(frpcJson)) {
+                ez_printf_error("Failed to write frpc config file\n");
+                send_config_ack_error(req_id, -4, "Failed to write config file");
+                return;
+            }
+
+            ez_printf_info("=== [CONFIG.UPDATE.WRITE] Successfully wrote frpc config to %s ===\n", get_frpc_config_path().c_str());
+            ez_printf_info("  - Written config JSON: %s\n", frpcJson.c_str());
+
+            // 4. 回复 AckConfigUpdate（成功）
+            send_config_ack_success(req_id);
+            return;
+        }
+
+        // 无法解析为已知消息类型，忽略
+        ez_printf_info("Unknown request message type, ignoring\n");
+        return;
+    }
+
+    // 非 JSON-RPC 2.0 消息，忽略
+    ez_printf_info("Not a valid JSON-RPC 2.0 message, ignoring\n");
 }
 
 // 处理 JSON-RPC 2.0 格式的注册响应（成功）
@@ -313,5 +484,76 @@ void CFunRegisterCli::handle_register_ack_jsonrpc2_error(int32_t error_code, con
            m_edge_id.c_str(), error_code, error_msg.c_str());
 }
 
+// ==============================
+// frpc 远程配置处理辅助函数
+// ==============================
+
+void CFunRegisterCli::send_config_ack_success(int64_t req_id)
+{
+    // 构建 JSON-RPC 2.0 成功响应
+    // {"jsonrpc":"2.0","result":{"code":0,"message":"success","applied":true,"edge_id":"edge001"},"id":<req_id>}
+    JsonValue resultObj = JsonValue::createObject();
+    resultObj.setInt("code", 0);
+    resultObj.setString("message", "success");  // 使用 message 字段名，与 manager 期望的一致
+    resultObj.setBool("applied", true);
+    resultObj.setString("edge_id", m_edge_id);  // 添加 edge_id 字段，方便 manager 更新数据库
+
+    std::string ackJson = ComeJsonCodec::buildJsonRpcSuccess(resultObj, JsonValue::createInt64(req_id));
+    send_message(ackJson.c_str(), ackJson.length());
+}
+
+void CFunRegisterCli::send_config_ack_error(int64_t req_id, int32_t code, const std::string& msg)
+{
+    // 构建错误响应
+    std::string errJson = ComeJsonCodec::buildJsonRpcError(code, msg, JsonValue::createInt64(req_id));
+    send_message(errJson.c_str(), errJson.length());
+}
+
+void CFunRegisterCli::send_config_query_error(int64_t req_id, int32_t code, const std::string& msg)
+{
+    // 构建错误响应
+    std::string errJson = ComeJsonCodec::buildJsonRpcError(code, msg, JsonValue::createInt64(req_id));
+    send_message(errJson.c_str(), errJson.length());
+}
+
+void CFunRegisterCli::send_message(const char *data, size_t len)
+{
+    if (!g_DevWsRegisterCli.IsConnected()) {
+        ez_printf_error("WebSocket not connected, cannot send message\n");
+        return;
+    }
+
+    int ret = g_DevWsRegisterCli.SendText(data, len);
+    if (ret != 0) {
+        ez_printf_error("Failed to send message: %d\n", ret);
+    }
+}
+
+bool CFunRegisterCli::write_frpc_config_file(const std::string& jsonStr)
+{
+    // 确保目录存在
+    system(("mkdir -p " + FRPC_CONFIG_DIR).c_str());
+
+    // 写入文件
+    const std::string config_file = get_frpc_config_path();
+    FILE* fp = fopen(config_file.c_str(), "w");
+    if (!fp) {
+        ez_printf_error("Failed to open %s for writing\n", config_file.c_str());
+        return false;
+    }
+
+    size_t written = fwrite(jsonStr.c_str(), 1, jsonStr.length(), fp);
+    fclose(fp);
+
+    if (written != jsonStr.length()) {
+        ez_printf_error("Failed to write complete JSON to file\n");
+        return false;
+    }
+
+    // 设置文件权限为 0644
+    chmod(config_file.c_str(), 0644);
+
+    return true;
+}
 
 // 心跳是通知，无响应，不需要处理响应

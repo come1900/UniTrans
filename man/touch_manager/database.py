@@ -6,7 +6,7 @@ Database models and initialization (v0.1 MVP).
 
 from datetime import datetime
 import logging
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, text, inspect
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, text, inspect, Text, BigInteger
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from config import Config
@@ -93,11 +93,29 @@ class Edge(Base):
     last_offline_time = Column(DateTime)  # 设备上次离线时间戳（用于统计）
     # confirmed: 99=待确认，1=已确认 (白名单)，0=黑名单 (拒绝)
     confirmed = Column(Integer, default=99)  # SmallInteger: 99=pending, 1=confirmed, 0=rejected
+    # frpc 远程配置状态
+    config_status = Column(String(20), default='unknown')  # 'unknown', 'configuring', 'configured', 'config_failed', 'pending'
+    config_version = Column(Integer, default=0)  # 配置版本号
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     ingress = relationship('Ingress', back_populates="edges")
+
+class EdgeConfig(Base):
+    """Edge frpc config model (v0.2 - frpc remote config)."""
+    __tablename__ = "edge_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    edge_id = Column(String(64), ForeignKey('edges.edge_id'), unique=True, nullable=False, index=True)  # 边缘 ID，唯一索引
+    config_json = Column(Text, nullable=True)  # frpc 配置 JSON 字符串
+    version = Column(Integer, default=0)  # 配置版本号
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    configuring_since = Column(BigInteger, nullable=True)  # UTC 毫秒时间戳 (uint64)，用于超时检查
+    synced_at = Column(BigInteger, nullable=True)  # UTC 毫秒时间戳：DB 与 edge 最近一次同步核对的时间
+
+    # Relationships
+    edge = relationship('Edge', backref='config')
 
 class Ingress(Base):
     """Ingress model (v0.1 MVP)."""
@@ -123,8 +141,18 @@ def init_db():
     global _engine, _SessionLocal
 
     if _engine is None:
-        # 使用 WAL 模式提高并发写入性能
-        _engine = create_engine(f'sqlite:///{Config.DATABASE_PATH}', echo=False)
+        # 使用 WAL 模式提高并发写入性能。
+        # 连接池用 NullPool：所有写操作已被进程内 get_db_lock() 串行化，
+        # 无需（也不应）依赖有限容量的 QueuePool——否则高并发下会被耗尽导致
+        # "QueuePool limit ... reached, connection timed out" 的 500/503。
+        # NullPool 每次 get_db() 新建、db.close() 即释放，无池上限。
+        from sqlalchemy.pool import NullPool
+        _engine = create_engine(
+            f'sqlite:///{Config.DATABASE_PATH}',
+            echo=False,
+            poolclass=NullPool,
+            connect_args={'check_same_thread': False},
+        )
         # 启用 WAL 模式和 busy_timeout
         with _engine.connect() as conn:
             from sqlalchemy import text
@@ -140,6 +168,9 @@ def init_db():
 
         # 迁移添加新列（link_duration 等）
         _migrate_add_columns()
+
+        # 迁移 edge_configs 表（synced_at 同步时间戳）
+        _migrate_edge_config_columns()
 
         # 初始化默认数据（如果数据库为空）
         _init_default_data()
@@ -243,6 +274,38 @@ def _migrate_add_columns():
     except Exception as e:
         db.rollback()
         logger.debug(f"Add columns migration: {e}")
+    finally:
+        db.close()
+
+def _migrate_edge_config_columns():
+    """迁移 edge_configs 表：添加 synced_at 列（DB 与 edge 最近一次同步核对的毫秒时间戳）。
+
+    独立于 _migrate_add_columns：那张表迁移以 'devices' 守卫，实际表名为 'edges'，
+    会提前 return，因此 edge_configs 的迁移必须单独走。
+    """
+    if _SessionLocal is None:
+        return
+
+    logger = logging.getLogger(__name__)
+    db = _SessionLocal()
+    try:
+        from sqlalchemy import inspect, text
+
+        inspector = inspect(_engine)
+        if 'edge_configs' not in inspector.get_table_names():
+            return
+
+        cols = [col['name'] for col in inspector.get_columns('edge_configs')]
+        if 'synced_at' not in cols:
+            logger.info("Adding synced_at column to edge_configs table...")
+            db.execute(text("ALTER TABLE edge_configs ADD COLUMN synced_at BIGINT"))
+            db.commit()
+            logger.info("synced_at column added")
+        else:
+            logger.debug("synced_at column already exists")
+    except Exception as e:
+        db.rollback()
+        logger.debug(f"edge_configs synced_at migration: {e}")
     finally:
         db.close()
 

@@ -27,8 +27,8 @@ class Config:
     INGRESS_RECONNECT_INTERVAL = int(os.getenv('INGRESS_RECONNECT_INTERVAL', 10))  # seconds
 
     # Default ingress server configuration
-    DEFAULT_INGRESS_ID = os.getenv('DEFAULT_INGRESS_ID', 'lili-47.100.49.48')
-    DEFAULT_INGRESS_HOST = os.getenv('DEFAULT_INGRESS_HOST', '47.100.49.48')
+    DEFAULT_INGRESS_ID = os.getenv('DEFAULT_INGRESS_ID', 'local-127.0.0.1')
+    DEFAULT_INGRESS_HOST = os.getenv('DEFAULT_INGRESS_HOST', '127.0.0.1')
     DEFAULT_INGRESS_PORT = int(os.getenv('DEFAULT_INGRESS_PORT', 54321))
 
     # WebSocket ping/pong configuration
@@ -41,8 +41,35 @@ class Config:
     EDGE_LIST_BATCH_SIZE = int(os.getenv('EDGE_LIST_BATCH_SIZE', 50))  # 每批次获取的边缘数量
     EDGE_LIST_QUERY_TIMEOUT = int(os.getenv('EDGE_LIST_QUERY_TIMEOUT', 10))  # 查询超时时间（秒）
 
+    # ------------------------------------------------------------------
+    # 配置下发"确认超时"阈值 (CONFIG_CONFIRM_TIMEOUT, 单位: 秒)
+    #  作用: edge 收到配置后仍处于 configuring(未 confirmed)时, 再次 POST 同一条配置,
+    #       允许重推前必须等待的间隔。用于避免在 edge 处理完成前反复重推(节流)。
+    #  判定(见 api/edges.py): 距上次下发超过本阈值 -> 允许重试(重新分配版本并重推);
+    #       未超过 -> 返回 busy(50008 "Config update in progress, please try later")。
+    #  取值:
+    #    1~3600 : 有效范围(秒)。默认 10。
+    #    0      : 关闭此节流逻辑 —— 此时每次 POST 都直接重推, 不等待、不返回 busy。
+    #    其他(超范围/空值/非法值) : 回退到默认值 10。
+    #  可通过环境变量 CONFIG_CONFIRM_TIMEOUT 覆盖。
+    # ------------------------------------------------------------------
+    try:
+        _cfg_confirm_timeout = int(os.getenv('CONFIG_CONFIRM_TIMEOUT', 10))
+    except (TypeError, ValueError):
+        _cfg_confirm_timeout = 10  # 空值/非法值回退默认
+    if _cfg_confirm_timeout == 0:
+        CONFIG_CONFIRM_TIMEOUT = 0
+    elif 1 <= _cfg_confirm_timeout <= 3600:
+        CONFIG_CONFIRM_TIMEOUT = _cfg_confirm_timeout
+    else:
+        CONFIG_CONFIRM_TIMEOUT = 10  # 超范围回退默认
+
     # Logging configuration
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'DEBUG')  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+    # 文件与 stdout 可分别设级: 未设置(空)时跟随 LOG_LEVEL, 保持现有行为一致。
+    #  用法示例: LOG_LEVEL=DEBUG LOG_LEVEL_CONSOLE=INFO —— 文件记全量DEBUG, 终端只看INFO(不刷屏)。
+    LOG_LEVEL_FILE = os.getenv('LOG_LEVEL_FILE', '')
+    LOG_LEVEL_CONSOLE = os.getenv('LOG_LEVEL_CONSOLE', 'INFO')
     LOG_PATH = os.getenv('LOG_PATH', str('/tmp/logs'))
     LOG_FILE = os.getenv('LOG_FILE', 'touch_manager.log')
     LOG_MAX_BYTES = int(os.getenv('LOG_MAX_BYTES', 1 * 1024 * 1024))  # 10MB

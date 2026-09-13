@@ -11,9 +11,13 @@ Supports:
 
 import logging
 import os
+import re
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 from config import Config
+
+# werkzeug access 日志内嵌的时间段模式, 如  [11/Sep/2026 14:07:52 +0000]
+_WERKZEUG_TIME_RE = re.compile(r'\[\d{1,2}/[A-Za-z]{3}/\d{4}:\d{2}:\d{2}:\d{2} [+-]\d{4}\] ')
 
 
 class NginxFormatter(logging.Formatter):
@@ -90,20 +94,45 @@ class DetailedFormatter(logging.Formatter):
 
 class SimpleFormatter(logging.Formatter):
     """Simple log formatter."""
-    
+
     def format(self, record):
         timestamp = datetime.fromtimestamp(record.created).strftime('%Y-%m-%d %H:%M:%S')
         return f'{timestamp} [{record.levelname}] {record.name}: {record.getMessage()}'
 
 
+class CodeFormatter(logging.Formatter):
+    """统一日志格式: 带文件名(行号) + 毫秒时间, 并去掉 werkzeug 内嵌时间避免时间重复。
+
+    输出示例:
+        2026-09-11 14:09:10.196 [INFO] logger.py(132) touch_ingress: Edge edge001 heartbeat
+    """
+
+    def format(self, record):
+        # 带毫秒, 与 touch_ingress 的日志风格一致
+        timestamp = datetime.fromtimestamp(record.created).strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]
+        msg = record.getMessage()
+        # werkzeug access 日志自带一段内嵌时间(如 [11/Sep/2026 14:07:52 +0000]),
+        # 与统一前缀时间重复, 这里去掉, 保证每行只保留一个时间戳。
+        if record.name == 'werkzeug' and record.levelno == logging.INFO:
+            msg = _WERKZEUG_TIME_RE.sub('', msg)
+        return f'{timestamp} [{record.levelname}] {record.filename}({record.lineno}) {record.name}: {msg}'
+
+
 def get_formatter(format_type='nginx'):
     """Get log formatter by type."""
     if format_type == 'nginx':
-        return NginxFormatter()
+        return CodeFormatter()
     elif format_type == 'detailed':
         return DetailedFormatter()
     else:
-        return SimpleFormatter()
+        return CodeFormatter()
+
+
+def _resolve_level(name, default):
+    """将 logger 等级字符串解析为 logging 级别；非法值回退到 default。"""
+    if not name:
+        return default
+    return getattr(logging, name.upper(), default)
 
 
 def setup_logging():
@@ -142,14 +171,18 @@ def setup_logging():
         encoding='utf-8',
         delay=False
     )
-    file_handler.setLevel(getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO))
-    file_handler.setFormatter(get_formatter(Config.LOG_FORMAT))
+    # 文件等级取 LOG_LEVEL_FILE(未设置则跟随 LOG_LEVEL)
+    file_handler.setLevel(_resolve_level(Config.LOG_LEVEL_FILE,
+                                         getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO)))
+    file_handler.setFormatter(CodeFormatter())
     root_logger.addHandler(file_handler)
-    
+
     # Create console handler (for development)
+    #   stdout 等级取 LOG_LEVEL_CONSOLE(未设置则跟随 LOG_LEVEL)
     console_handler = logging.StreamHandler()
-    console_handler.setLevel(getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO))
-    console_handler.setFormatter(SimpleFormatter())
+    console_handler.setLevel(_resolve_level(Config.LOG_LEVEL_CONSOLE,
+                                            getattr(logging, Config.LOG_LEVEL.upper(), logging.INFO)))
+    console_handler.setFormatter(CodeFormatter())
     root_logger.addHandler(console_handler)
     
     # Log configuration info
