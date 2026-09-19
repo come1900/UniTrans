@@ -11,6 +11,22 @@
 
 ---
 
+## 路径约定
+
+> 本仓库根目录（`UniTrans/`）以下统称 **`$REPO`**。本文件位于 `test/touch/spec/`，
+> 相对仓库根为 `../../..`。所有命令中的 `$REPO` 均应替换为实际仓库根：
+>
+> ```bash
+> # 在仓库根目录执行（等价于 "cd 到仓库根"）
+> REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
+> # 若已位于仓库根，直接：
+> # cd /path/to/your/UniTrans
+> ```
+>
+> 本文档中的 `build/`、`man/`、`libs/`、`test/` 等均相对 `$REPO` 定位。
+
+---
+
 ## 系统架构
 
 **详见**: [spec-design.md](spec-design.md) - 架构设计文档
@@ -64,13 +80,13 @@ make install  # 安装到 $HOME/libs/
 
 **编译**:
 ```bash
-cd /home/wujj/svn/daily/src/appmodule/UniTrans/build
+cd $REPO/build
 make -f 93.Makefile.Touch.Edge rebuild
 ```
 
 **启动**:
 ```bash
-cd /home/wujj/svn/daily/src/appmodule/UniTrans/build/local
+cd $REPO/build/local
 cp ../../touchEdge-linux .
 ./touchEdge-linux &
 ```
@@ -101,13 +117,13 @@ ps aux | grep "touchEdge-linux" | grep -v grep | awk '{print $2}' | xargs kill -
 
 **编译**:
 ```bash
-cd /home/wujj/svn/daily/src/appmodule/UniTrans/build
+cd $REPO/build
 make -f 93.Makefile.Touch.Ingress rebuild
 ```
 
 **启动**:
 ```bash
-cd /home/wujj/svn/daily/src/appmodule/UniTrans/build/local
+cd $REPO/build/local
 cp ../../touchIngress-linux .
 ./touchIngress-linux &
 ```
@@ -261,7 +277,7 @@ ps aux | grep "python app.py" | grep -v grep | awk '{print $2}' | xargs kill -9
 **统一运行目录**: `build/local/`
 
 ```bash
-cd /home/wujj/svn/daily/src/appmodule/UniTrans/build/local
+cd $REPO/build/local
 ./touchIngress-linux &
 ./touchEdge-linux &
 ```
@@ -309,7 +325,7 @@ cd /home/wujj/svn/daily/src/appmodule/UniTrans/build/local
 
 **编译并启动**:
 ```bash
-cd /home/wujj/svn/daily/src/appmodule/UniTrans/test/touch/touch_edge
+cd $REPO/test/touch/touch_edge
 make clean
 make
 ./touch_edge-linux --host 127.0.0.1 --port 54321 --edge-id myedge --edge-key mykey
@@ -373,15 +389,15 @@ ls -ld /tmp/logs
 
 ```bash
 # 终端 1：启动 touchIngress
-cd /home/wujj/svn/daily/src/appmodule/UniTrans/build/local
+cd $REPO/build/local
 ./touchIngress-linux &
 
 # 终端 2：启动 touchEdge
-cd /home/wujj/svn/daily/src/appmodule/UniTrans/build/local
+cd $REPO/build/local
 ./touchEdge-linux &
 
 # 终端 3：启动 touch_manager
-cd /home/wujj/svn/daily/src/appmodule/UniTrans/man/touch_manager
+cd $REPO/man/touch_manager
 
 # 首次运行时，先准备虚拟环境（仅第一次需要）
 if [ ! -d "wpyenv" ]; then
@@ -413,7 +429,7 @@ DEFAULT_INGRESS_ID='local-127.0.0.1' DEFAULT_INGRESS_HOST='127.0.0.1' DATABASE_N
 
 ```bash
 # 终端 4：启动测试 edge
-cd /home/wujj/svn/daily/src/appmodule/UniTrans/test/touch/touch_edge
+cd $REPO/test/touch/touch_edge
 ./touch_edge-linux --host 127.0.0.1 --port 54321 --edge-id myedge --edge-key mykey
 ```
 
@@ -426,7 +442,7 @@ curl -X POST http://localhost:18051/api/v1/edges/list \
   -d '{}'
 
 # 运行自动化测试
-cd /home/wujj/svn/daily/src/appmodule/UniTrans/test/touch/scripts
+cd $REPO/test/touch/scripts
 ./test_manager_api.sh
 ```
 
@@ -473,10 +489,10 @@ rm -f /tmp/logs/touch_manager.log
 mkdir -p /tmp/logs
 
 # 5. 清理测试数据库
-rm -f /home/wujj/svn/daily/src/appmodule/UniTrans/man/touch_manager/t-touch_manager.db
+rm -f $REPO/man/touch_manager/t-touch_manager.db
 
 # 6. 清理编译产物（如果需要重新编译）
-cd /home/wujj/svn/daily/src/appmodule/UniTrans/build
+cd $REPO/build
 make -f 93.Makefile.Touch.Ingress clean
 ```
 

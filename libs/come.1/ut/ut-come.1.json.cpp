@@ -82,7 +82,7 @@ int test_AckEdgeOnline() {
     assert(decoded.code == 0);
     assert(decoded.msg == "Edge online success");
     assert(decoded.success == true);
-    assert(decoded.access_token == "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9");
+    assert(decoded.touch_token == "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9");
     assert(decoded.token_type == "Bearer");
     assert(decoded.expires_in == 3600);
 
@@ -90,7 +90,7 @@ int test_AckEdgeOnline() {
         std::cout << "Decode success: code=" << decoded.code
                   << ", msg=" << decoded.msg
                   << ", success=" << decoded.success
-                  << ", access_token=" << decoded.access_token
+                  << ", touch_token=" << decoded.touch_token
                   << ", token_type=" << decoded.token_type
                   << ", expires_in=" << decoded.expires_in << std::endl;
     }
@@ -108,7 +108,7 @@ int test_EdgeReport() {
 
     EdgeReport report;
     report.id = "edge001";
-    report.access_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
+    report.touch_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
     report.data["temperature"] = "25.5";
     report.data["humidity"] = "60.0";
     report.data["status"] = "normal";
@@ -125,13 +125,13 @@ int test_EdgeReport() {
     }
 
     assert(decoded.id == "edge001");
-    assert(decoded.access_token == "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9");
+    assert(decoded.touch_token == "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9");
     assert(decoded.data["temperature"] == "25.5");
     assert(decoded.data["humidity"] == "60.0");
 
     if (g_details || showThisDetails) {
         std::cout << "Decode success: id=" << decoded.id
-                  << ", access_token=" << decoded.access_token
+                  << ", touch_token=" << decoded.touch_token
                   << ", data size=" << decoded.data.size() << std::endl;
     }
 
@@ -258,7 +258,7 @@ int test_CodeOverflow() {
 
     // 创建一个包含超范围 code 值的 JSON（超过 int32_t 最大值 2147483647）
     // 使用 50 亿（5000000000），远超过 int32_t 的最大值
-    std::string jsonStr = R"({"code":5000000000,"msg":"Test message","success":true,"access_token":"test_token","token_type":"Bearer","expires_in":3600})";
+    std::string jsonStr = R"({"code":5000000000,"msg":"Test message","success":true,"touch_token":"test_token","token_type":"Bearer","expires_in":3600})";
 
     if (g_details || showThisDetails) {
         std::cout << "JSON with overflow code:\n" << jsonStr << std::endl;
@@ -283,7 +283,7 @@ int test_CodeOverflow() {
     // 验证其他字段正常
     assert(decoded.msg == "Test message");
     assert(decoded.success == true);
-    assert(decoded.access_token == "test_token");
+    assert(decoded.touch_token == "test_token");
     assert(decoded.token_type == "Bearer");
     assert(decoded.expires_in == 3600);
 
@@ -291,7 +291,7 @@ int test_CodeOverflow() {
         std::cout << "Decode success: code=" << decoded.code
                   << " (default value due to overflow), msg=" << decoded.msg
                   << ", success=" << decoded.success
-                  << ", access_token=" << decoded.access_token
+                  << ", touch_token=" << decoded.touch_token
                   << ", token_type=" << decoded.token_type
                   << ", expires_in=" << decoded.expires_in << std::endl;
     }
@@ -426,7 +426,7 @@ int test_ConfigUpdate_tunnelService() {
     assert(decoded.edge_id == "edge001");
     assert(decoded.config_type == "tunnelService");
     assert(decoded.version == 1);
-    assert(decoded.access_token == "test_access_token");
+    assert(decoded.touch_token == "test_access_token");
 
     if (g_details || showThisDetails) {
         std::cout << "Decode success:" << std::endl;
@@ -542,7 +542,7 @@ int test_toFrpcConfig() {
     assert(decoded.edge_id == "edge001");
     assert(decoded.config_type == "tunnelService");
     assert(decoded.version == 1);
-    assert(decoded.access_token == "test_access_token");
+    assert(decoded.touch_token == "test_access_token");
     assert(decoded.configContent.services.size() == 1);
 
     const CServiceConfig& svc = decoded.configContent.services[0];

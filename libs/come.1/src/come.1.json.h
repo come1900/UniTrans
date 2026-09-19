@@ -322,7 +322,7 @@ public:
     // 将 FrpcConfig 转换为 ConfigUpdate_tunnelService
     // 注意：需要指定 edge_id 和 version 等信息
     static bool fromFrpcConfig(const FrpcConfig& frpcCfg, const std::string& edge_id,
-                               int32_t version, const std::string& access_token,
+                               int32_t version, const std::string& touch_token,
                                ConfigUpdate_tunnelService& msg);
 };
 

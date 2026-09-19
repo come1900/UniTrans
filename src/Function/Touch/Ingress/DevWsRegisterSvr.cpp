@@ -72,11 +72,11 @@ bool CDevWsRegisterSvr::Start(unsigned short port, const char *protocol, const c
     // 创建WebSocket服务端句柄
     m_ws_handle = ez_ws_server_handle_create(&config, &callbacks);
     if (!m_ws_handle) {
-        ez_printf_error("touch_ingress: [WS_SERVER] Failed to create WebSocket server handle on port %d\n", port);
+        ez_printf_error("[WS_SERVER] Failed to create WebSocket server handle on port %d\n", port);
         return false;
     }
 
-    ez_printf_info("touch_ingress: [WS_SERVER] WebSocket server handle created on port %d, path=%s, protocol=%s\n",
+    ez_printf_info("[WS_SERVER] WebSocket server handle created on port %d, path=%s, protocol=%s\n",
            port, config.path_prefix, config.protocol);
 
     // 注意：这里不自动创建线程，线程由 Start(CEZObject*, SignalProc_t) 管理
@@ -219,7 +219,7 @@ void CDevWsRegisterSvr::ThreadProc()
     // ezThread 自驱动循环
     // 按照 ezsocket 库规范：循环调用 ez_ws_server_service_exec 处理事件
     // 参考：touch-svr-native.c 中的 ws_server_thread_func
-    ez_printf_info("touch_ingress: WebSocket server thread started\n");
+    ez_printf_info("WebSocket server thread started\n");
     uint64_t _tv_ms_prev = SystemGetMSCount();
     while (m_bLoop) {
         if (m_ws_handle) {
@@ -233,11 +233,11 @@ void CDevWsRegisterSvr::ThreadProc()
             _tv_ms_prev = _tv_ms_cur;
             // 事件循环迭代耗时超过阈值说明有某一步被阻塞（正常 idle 迭代 ~0ms）
             if (_iter_ms > 300) {
-                ez_printf_warning("touch_ingress: [EVENTLOOP] service_exec iteration took %ld ms (阻塞检测), ret=%d\n", _iter_ms, ret);
+                ez_printf_warning("[EVENTLOOP] service_exec iteration took %ld ms (阻塞检测), ret=%d\n", _iter_ms, ret);
             }
             if (ret < 0) {
                 // 服务出错，打印日志并退出循环
-                ez_printf_error("touch_ingress: ez_ws_server_service_exec returned %d, stopping server loop\n", ret);
+                ez_printf_error("ez_ws_server_service_exec returned %d, stopping server loop\n", ret);
                 m_bLoop = EZTHREAD_BOOL_FALSE;
                 break;
             }
@@ -249,7 +249,7 @@ void CDevWsRegisterSvr::ThreadProc()
 
     // 线程退出前，确保资源清理
     // 注意：ez_ws_server_cleanup 会在 Stop() 中调用，这里不需要重复清理
-    ez_printf_info("touch_ingress: WebSocket server thread exiting\n");
+    ez_printf_info("WebSocket server thread exiting\n");
 }
 
 void CDevWsRegisterSvr::s_on_receive(int client_id, const void *data, size_t len, int is_binary, void *user_data)
@@ -266,7 +266,7 @@ void CDevWsRegisterSvr::s_on_connected(int client_id, const char *ip, int port, 
 {
     CDevWsRegisterSvr *self = (CDevWsRegisterSvr *)user_data;
     if (self) {
-        ez_printf_info("touch_ingress: WebSocket client connected [client_id=%d, ip=%s, port=%d]\n",
+        ez_printf_info("WebSocket client connected [client_id=%d, ip=%s, port=%d]\n",
                        client_id, ip ? ip : "unknown", port);
         CEZLock lock(self->m_MutexSigBuffer);
         // 触发统一信号：SIGNAL_CONNECTED, client_id, ip, port, status(0=成功), 0
@@ -278,7 +278,7 @@ void CDevWsRegisterSvr::s_on_disconnected(int client_id, void *user_data)
 {
     CDevWsRegisterSvr *self = (CDevWsRegisterSvr *)user_data;
     if (self) {
-        ez_printf_info("touch_ingress: WebSocket client disconnected [client_id=%d]\n", client_id);
+        ez_printf_info("WebSocket client disconnected [client_id=%d]\n", client_id);
         CEZLock lock(self->m_MutexSigBuffer);
         // 触发统一信号：SIGNAL_DISCONNECTED, client_id, NULL, error_code(0=正常断开), 0, 0
         self->m_SigNotify(SIGNAL_DISCONNECTED, client_id, NULL, 0, 0, 0);

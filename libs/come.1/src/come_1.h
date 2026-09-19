@@ -9,7 +9,7 @@
  *  Explain:
  *     Define message classes for come protocol, including device online,
  *     device report, server command and their acknowledgment messages.
- *     Support OAuth2-style authentication with access_token.
+ *     Support OAuth2-style authentication with touch_token.
  *
  *  Update:
  *     2024-01-01 00:00:00 Create
@@ -27,9 +27,9 @@
 // 基础消息类（可选，用于统一接口）
 class MsgCome {
 public:
-    std::string access_token;   // 访问令牌（用于身份验证）
+    std::string touch_token;   // 访问令牌（用于身份验证）
 
-    MsgCome() : access_token("") {}
+    MsgCome() : touch_token("") {}
     virtual ~MsgCome() = default;
 };
 
@@ -74,28 +74,28 @@ public:
     std::string id;          // 边缘唯一标识
     std::string key;         // 边缘认证密钥
     std::string type;        // 边缘类型
-    std::string nonce;       // 随机数，用于OAuth2风格认证
-    std::string token;       // 从 Manager 获取的认证 token（用于与 Ingress 认证）
+    std::string nonce;       // 随机数，用于挑战-响应认证
+    std::string sign;        // 校验数据（签名）：由 key、id、nonce 等计算得出，供服务端校验
 
     EdgeOnline() = default;
     EdgeOnline(const std::string& _id, const std::string& _key,
                  const std::string& _type = "", const std::string& _nonce = "",
-                 const std::string& _token = "")
-        : id(_id), key(_key), type(_type), nonce(_nonce), token(_token) {}
+                 const std::string& _sign = "")
+        : id(_id), key(_key), type(_type), nonce(_nonce), sign(_sign) {}
 };
 
 class AckEdgeOnline : public AckMsgCome {
 public:
     bool success;               // 是否成功上线
-    std::string access_token;   // 访问令牌（OAuth2风格认证）
+    std::string touch_token;   // 访问令牌（OAuth2风格认证）
     std::string token_type;     // 令牌类型（如 "Bearer"）
     int32_t expires_in;         // 令牌过期时间（秒）
 
     AckEdgeOnline() : AckMsgCome(), success(false), token_type("Bearer"), expires_in(0) {}
     AckEdgeOnline(int32_t _code, bool _success, const std::string& _msg = "",
-                    const std::string& _access_token = "", const std::string& _token_type = "Bearer",
+                    const std::string& _touch_token = "", const std::string& _token_type = "Bearer",
                     int32_t _expires_in = 0)
-        : AckMsgCome(_code, _msg), success(_success), access_token(_access_token),
+        : AckMsgCome(_code, _msg), success(_success), touch_token(_touch_token),
           token_type(_token_type), expires_in(_expires_in) {}
 };
 
@@ -110,9 +110,9 @@ public:
 
     EdgeReport() = default;
     EdgeReport(const std::string& _id, const std::map<std::string, std::string>& _data,
-                 const std::string& _access_token = "")
+                 const std::string& _touch_token = "")
         : MsgCome(), id(_id), data(_data) {
-        access_token = _access_token;
+        touch_token = _touch_token;
     }
 };
 
@@ -167,10 +167,10 @@ public:
     std::string timestamp;       // 心跳时间戳（可选）
 
     EdgeHeartbeat() = default;
-    EdgeHeartbeat(const std::string& _id, const std::string& _access_token = "",
+    EdgeHeartbeat(const std::string& _id, const std::string& _touch_token = "",
                     const std::string& _timestamp = "")
         : MsgCome(), id(_id), timestamp(_timestamp) {
-        access_token = _access_token;
+        touch_token = _touch_token;
     }
 };
 
@@ -199,10 +199,10 @@ public:
     ConfigUpdate() : version(0) {}
     ConfigUpdate(const std::string& _edge_id, const std::string& _config_type,
                  const std::string& _config_content, int32_t _version = 0,
-                 const std::string& _access_token = "")
+                 const std::string& _touch_token = "")
         : edge_id(_edge_id), config_type(_config_type), config_content(_config_content),
           version(_version) {
-        access_token = _access_token;
+        touch_token = _touch_token;
     }
 };
 
@@ -328,8 +328,8 @@ public:
 
     ConfigUpdate_tunnelService() : ConfigUpdate() {}
     ConfigUpdate_tunnelService(const std::string& _edge_id, const CConfigContent& _content,
-                               int32_t _version = 0, const std::string& _access_token = "")
-        : ConfigUpdate(_edge_id, "tunnelService", "", _version, _access_token),
+                               int32_t _version = 0, const std::string& _touch_token = "")
+        : ConfigUpdate(_edge_id, "tunnelService", "", _version, _touch_token),
           configContent(_content) {}
 };
 
@@ -412,9 +412,9 @@ public:
     ManagerCommand() = default;
     ManagerCommand(const std::string& _cmd_type, const std::string& _target_id,
                    const std::map<std::string, std::string>& _params = {},
-                   const std::string& _access_token = "")
+                   const std::string& _touch_token = "")
         : command_type(_cmd_type), target_id(_target_id), params(_params) {
-        access_token = _access_token;
+        touch_token = _touch_token;
     }
 };
 

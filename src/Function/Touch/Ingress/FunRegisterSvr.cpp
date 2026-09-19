@@ -24,6 +24,8 @@
 
 #include <ez_def_devel_debug.h>
 #include <ez_socket.h>
+#include <sha256.h>
+#include <str_opr.h>
 
 #include "../../../Logs.h"
 
@@ -46,38 +48,38 @@ CFunRegisterSvr::~CFunRegisterSvr()
 void CFunRegisterSvr::Start(unsigned short port, const char *protocol, const char *path_prefix)
 {
     if (m_started) {
-        ez_printf_warning("touch_ingress: Already started, ignoring Start() call\n");
+        ez_printf_warning("Already started, ignoring Start() call\n");
         return;
     }
 
-    ez_printf_info("touch_ingress: Starting on port %d, protocol=%s, path_prefix=%s\n",
+    ez_printf_info("Starting on port %d, protocol=%s, path_prefix=%s\n",
            port, protocol ? protocol : "come.1", path_prefix ? path_prefix : "/come");
 
     // 启动 WebSocket 服务端
     if (!g_DevWsRegisterSvr.Start(port, protocol ? protocol : "come.1", path_prefix ? path_prefix : "/come")) {
-        ez_printf_error("touch_ingress: Failed to start WebSocket server on port %d\n", port);
+        ez_printf_error("Failed to start WebSocket server on port %d\n", port);
         return;
     }
 
     // 注册信号处理（启动 WebSocket 服务端线程并注册回调）
     if (!g_DevWsRegisterSvr.Start(this, (CDevWsRegisterSvr::DevWsRegisterSvrSignalProc_t)&CFunRegisterSvr::OnWebsocketNotify)) {
-        ez_printf_error("touch_ingress: Failed to register WebSocket signal handler\n");
+        ez_printf_error("Failed to register WebSocket signal handler\n");
         g_DevWsRegisterSvr.Stop();
         return;
     }
 
     m_started = true;
-    ez_printf_info("touch_ingress: Started successfully on port %d\n", port);
+    ez_printf_info("Started successfully on port %d\n", port);
 }
 
 void CFunRegisterSvr::Stop()
 {
     if (!m_started) {
-        ez_printf_warning("touch_ingress: Already stopped, ignoring Stop() call\n");
+        ez_printf_warning("Already stopped, ignoring Stop() call\n");
         return;
     }
 
-    ez_printf_info("touch_ingress: Stopping... (online_edges=%zu, offline_cache=%zu)\n",
+    ez_printf_info("Stopping... (online_edges=%zu, offline_cache=%zu)\n",
            m_online_edges.size(), m_offline_edges_cache.size());
 
     // 注销信号处理（停止线程、清理 WebSocket 服务端）
@@ -89,7 +91,7 @@ void CFunRegisterSvr::Stop()
     m_offline_edges_cache.clear();
     m_manager_client_id = EZ_WS_SERVER_INVALID_CLIENT_ID;
 
-    ez_printf_info("touch_ingress: Stopped successfully\n");
+    ez_printf_info("Stopped successfully\n");
 }
 
 void CFunRegisterSvr::SetRegisterCallback(OnDeviceRegisterProc_t proc, void *user_data)
@@ -123,7 +125,7 @@ void CFunRegisterSvr::OnWebsocketNotify(CDevWsRegisterSvr::SignalType sig_type, 
         case CDevWsRegisterSvr::SIGNAL_CONNECTED: {
             // str_param=ip, int_param1=port, int_param2=status, int_param3=0
             // 连接建立时记录客户端的 IP 和端口
-            ez_printf_info("touch_ingress: [CONNECT] client_id=%d, ip=%s, port=%d, online_edges=%zu\n",
+            ez_printf_info("[CONNECT] client_id=%d, ip=%s, port=%d, online_edges=%zu\n",
                    client_id,
                    str_param ? str_param : "",
                    int_param1,
@@ -144,7 +146,7 @@ void CFunRegisterSvr::OnWebsocketNotify(CDevWsRegisterSvr::SignalType sig_type, 
 
             // 检查是否是 Manager 断开
             if (client_id == m_manager_client_id) {
-                ez_printf_info("touch_ingress: [DISCONNECT] Manager disconnected [client_id=%d, error_code=%d], online_edges=%zu\n",
+                ez_printf_info("[DISCONNECT] Manager disconnected [client_id=%d, error_code=%d], online_edges=%zu\n",
                        client_id, int_param1, m_online_edges.size());
                 m_manager_client_id = EZ_WS_SERVER_INVALID_CLIENT_ID;
                 break;
@@ -157,11 +159,11 @@ void CFunRegisterSvr::OnWebsocketNotify(CDevWsRegisterSvr::SignalType sig_type, 
 
                 if (edge.edge_id.empty()) {
                     // 连接建立但尚未完成 Edge 注册
-                    ez_printf_debug("touch_ingress: [DISCONNECT] Edge disconnected before registration [client_id=%d, ip=%s, error_code=%d]\n",
+                    ez_printf_debug("[DISCONNECT] Edge disconnected before registration [client_id=%d, ip=%s, error_code=%d]\n",
                            client_id, edge.public_ip.c_str(), int_param1);
                 } else {
                     // 已完成 Edge 注册后断开
-                    ez_printf_info("touch_ingress: [DISCONNECT] Edge disconnected [client_id=%d, edge_id=%s, error_code=%d]\n",
+                    ez_printf_info("[DISCONNECT] Edge disconnected [client_id=%d, edge_id=%s, error_code=%d]\n",
                            client_id, edge.edge_id.c_str(), int_param1);
 
                     // 缓存离线事件
@@ -171,9 +173,9 @@ void CFunRegisterSvr::OnWebsocketNotify(CDevWsRegisterSvr::SignalType sig_type, 
                     if (IsManagerConnected()) {
                         notify_device_offline(edge.edge_id);
                         m_offline_edges_cache[edge.edge_id].pending_manager_confirm = true;
-                        ez_printf_debug("touch_ingress: [OFFLINE] Sent offline notification for edge %s to manager\n", edge.edge_id.c_str());
+                        ez_printf_debug("[OFFLINE] Sent offline notification for edge %s to manager\n", edge.edge_id.c_str());
                     } else {
-                        ez_printf_debug("touch_ingress: [OFFLINE] Cached offline event for edge %s (manager offline)\n", edge.edge_id.c_str());
+                        ez_printf_debug("[OFFLINE] Cached offline event for edge %s (manager offline)\n", edge.edge_id.c_str());
                     }
                 }
 
@@ -181,7 +183,7 @@ void CFunRegisterSvr::OnWebsocketNotify(CDevWsRegisterSvr::SignalType sig_type, 
                 m_online_edges.erase(it);
             } else {
                 // 未知连接断开（可能是被踢掉的旧 Manager 或其他连接）
-                ez_printf_debug("touch_ingress: [DISCONNECT] Unknown client disconnected [client_id=%d, error_code=%d]\n", client_id, int_param1);
+                ez_printf_debug("[DISCONNECT] Unknown client disconnected [client_id=%d, error_code=%d]\n", client_id, int_param1);
             }
             break;
         }
@@ -197,7 +199,7 @@ void CFunRegisterSvr::handle_receive(int client_id, const char *data, size_t len
 
     // 优先判断是否为 JSON-RPC 2.0 格式
     if (!ComeJsonCodec::isJsonRpc2(json_str)) {
-        ez_printf_warning("touch_ingress: Non-JSON-RPC message from client_id=%d, closing connection: %.100s\n", client_id, data);
+        ez_printf_warning("Non-JSON-RPC message from client_id=%d, closing connection: %.100s\n", client_id, data);
         g_DevWsRegisterSvr.CloseClient(client_id);
         return;
     }
@@ -230,7 +232,7 @@ void CFunRegisterSvr::handle_receive(int client_id, const char *data, size_t len
     int64_t id = ComeJsonCodec::extractJsonRpcId(json_str);
 
     if (method.empty()) {
-        ez_printf_warning("touch_ingress: JSON-RPC message without method from client_id=%d, closing connection\n", client_id);
+        ez_printf_warning("JSON-RPC message without method from client_id=%d, closing connection\n", client_id);
         g_DevWsRegisterSvr.CloseClient(client_id);
         return;
     }
@@ -273,15 +275,15 @@ void CFunRegisterSvr::handle_receive(int client_id, const char *data, size_t len
         std::string dummy_method;
         int64_t dummy_id;
         if (ComeJsonCodec::decodeJsonRpcNotification(json_str, msg, dummy_method, dummy_id)) {
-            ez_printf_info("touch_ingress: [HEARTBEAT] Decoded successfully [edge_id=%s, access_token=%s]\n",
-                   msg.id.c_str(), msg.access_token.substr(0, 20).c_str());
+            ez_printf_info("[HEARTBEAT] Decoded successfully [edge_id=%s, touch_token=%s]\n",
+                   msg.id.c_str(), msg.touch_token.c_str());
             handle_device_heartbeat_jsonrpc2(client_id, msg);
         } else {
-            ez_printf_warning("touch_ingress: [HEARTBEAT] Failed to decode heartbeat from client_id=%d, json=%.200s\n", client_id, json_str.c_str());
+            ez_printf_warning("[HEARTBEAT] Failed to decode heartbeat from client_id=%d, json=%.200s\n", client_id, json_str.c_str());
             g_DevWsRegisterSvr.CloseClient(client_id);
         }
     } else {
-        ez_printf_warning("touch_ingress: Unknown method=%s from client_id=%d, closing connection\n", method.c_str(), client_id);
+        ez_printf_warning("Unknown method=%s from client_id=%d, closing connection\n", method.c_str(), client_id);
         g_DevWsRegisterSvr.CloseClient(client_id);
     }
 }
@@ -297,12 +299,12 @@ void CFunRegisterSvr::handle_device_online_jsonrpc2(int client_id, const EdgeOnl
     std::string device_key = msg.key;
     std::string edge_type = msg.type;
 
-    ez_printf_debug("touch_ingress: [EDGE.ONLINE] Received edge.online request [client_id=%d, edge_id=%s, type=%s, id=%ld]\n",
+    ez_printf_debug("[EDGE.ONLINE] Received edge.online request [client_id=%d, edge_id=%s, type=%s, id=%ld]\n",
            client_id, edge_id.c_str(), edge_type.c_str(), (long)id);
 
     if (edge_id.empty() || device_key.empty()) {
         // 参数错误
-        ez_printf_warning("touch_ingress: [EDGE.ONLINE] Invalid params [client_id=%d, edge_id=%s]\n", client_id, edge_id.c_str());
+        ez_printf_warning("[EDGE.ONLINE] Invalid params [client_id=%d, edge_id=%s]\n", client_id, edge_id.c_str());
         std::string err_json = ComeJsonCodec::buildJsonRpcError(-32602, "Invalid params: id and key are required", JsonValue::createInt64(id));
         if (!err_json.empty()) {
             g_DevWsRegisterSvr.SendText(client_id, err_json.c_str(), err_json.length());
@@ -311,9 +313,35 @@ void CFunRegisterSvr::handle_device_online_jsonrpc2(int client_id, const EdgeOnl
         return;
     }
 
+    // 校验 sign 与消息内前端 key 的自洽性（弱校验）：
+    // 只要 msg.sign 非空，就用 SHA256(key + id + nonce) 复核；不一致则拒绝关闭。
+    // 注：因 key 与本消息同传，此校验只证明发送者能算 hash，真正共享密钥认证待权威 key 存储就位后补齐。
+    if (!msg.sign.empty()) {
+        unsigned char digest[SHA256_BLOCK_SIZE];
+        SHA256_CTX ctx;
+        sha256_init(&ctx);
+        sha256_update(&ctx, (const unsigned char*)device_key.c_str(), device_key.size());
+        sha256_update(&ctx, (const unsigned char*)edge_id.c_str(), edge_id.size());
+        sha256_update(&ctx, (const unsigned char*)msg.nonce.c_str(), msg.nonce.size());
+        sha256_final(&ctx, digest);
+
+        char hex_buf[SHA256_BLOCK_SIZE * 2 + 1];
+        bin_to_hex_string(hex_buf, sizeof(hex_buf), digest, sizeof(digest));
+        if (strcmp(hex_buf, msg.sign.c_str()) != 0) {
+            ez_printf_warning("[EDGE.ONLINE] sign mismatch [client_id=%d, edge_id=%s, got %s, expect %s]\n",
+                   client_id, edge_id.c_str(), msg.sign.c_str(), hex_buf);
+            std::string err_json = ComeJsonCodec::buildJsonRpcError(40001, "Device sign verification failed", JsonValue::createInt64(id));
+            if (!err_json.empty()) {
+                g_DevWsRegisterSvr.SendText(client_id, err_json.c_str(), err_json.length());
+            }
+            g_DevWsRegisterSvr.CloseClient(client_id);
+            return;
+        }
+    }
+
     // 检查 Manager 是否连接
     if (!IsManagerConnected()) {
-        ez_printf_warning("touch_ingress: [EDGE.ONLINE] No manager connected, rejecting edge %s\n", edge_id.c_str());
+        ez_printf_warning("[EDGE.ONLINE] No manager connected, rejecting edge %s\n", edge_id.c_str());
         std::string err_json = ComeJsonCodec::buildJsonRpcError(40002, "No manager connected", JsonValue::createInt64(id));
         if (!err_json.empty()) {
             g_DevWsRegisterSvr.SendText(client_id, err_json.c_str(), err_json.length());
@@ -326,7 +354,7 @@ void CFunRegisterSvr::handle_device_online_jsonrpc2(int client_id, const EdgeOnl
     for (auto it = m_online_edges.begin(); it != m_online_edges.end(); ++it) {
         if (it->second.edge_id == edge_id) {
             // 业务错误码使用正整数
-            ez_printf_warning("touch_ingress: [EDGE.ONLINE] Device already connected [edge_id=%s, old_client_id=%d, new_client_id=%d]\n",
+            ez_printf_warning("[EDGE.ONLINE] Device already connected [edge_id=%s, old_client_id=%d, new_client_id=%d]\n",
                    edge_id.c_str(), it->first, client_id);
             std::string err_json = ComeJsonCodec::buildJsonRpcError(40003, "Device already connected", JsonValue::createInt64(id));
             if (!err_json.empty()) {
@@ -340,7 +368,7 @@ void CFunRegisterSvr::handle_device_online_jsonrpc2(int client_id, const EdgeOnl
     // 验证设备
     bool verified = verify_device(edge_id, device_key);
     if (!verified) {
-        ez_printf_warning("touch_ingress: [EDGE.ONLINE] Device verification failed [edge_id=%s, client_id=%d]\n", edge_id.c_str(), client_id);
+        ez_printf_warning("[EDGE.ONLINE] Device verification failed [edge_id=%s, client_id=%d]\n", edge_id.c_str(), client_id);
         std::string err_json = ComeJsonCodec::buildJsonRpcError(40001, "Device verification failed", JsonValue::createInt64(id));
         if (!err_json.empty()) {
             g_DevWsRegisterSvr.SendText(client_id, err_json.c_str(), err_json.length());
@@ -353,7 +381,7 @@ void CFunRegisterSvr::handle_device_online_jsonrpc2(int client_id, const EdgeOnl
     int32_t req_id = NotifyManagerEdgeOnline(client_id, edge_id, edge_type, "", "");
     if (req_id == 0) {
         // 没有 manager 连接
-        ez_printf_warning("touch_ingress: [EDGE.ONLINE] NotifyManagerEdgeOnline failed, rejecting edge %s\n", edge_id.c_str());
+        ez_printf_warning("[EDGE.ONLINE] NotifyManagerEdgeOnline failed, rejecting edge %s\n", edge_id.c_str());
         std::string err_json = ComeJsonCodec::buildJsonRpcError(40004, "Device rejected", JsonValue::createInt64(id));
         if (!err_json.empty()) {
             g_DevWsRegisterSvr.SendText(client_id, err_json.c_str(), err_json.length());
@@ -366,18 +394,15 @@ void CFunRegisterSvr::handle_device_online_jsonrpc2(int client_id, const EdgeOnl
     m_online_edges[client_id].pending_manager_confirm = true;
 
     // Manager 确认，接受设备上线
-    // 生成 access_token
-    char token_buf[65];
-    time_t now = time(NULL);
-    snprintf(token_buf, sizeof(token_buf), "%s_%ld", edge_id.c_str(), now);
-    std::string access_token(token_buf);
+    // 生成 touch_token（Edge 段，前缀 edge_id；gen_touch_token 恒返回非空）
+    std::string touch_token = gen_touch_token(TOKEN_TYPE_EDGE, edge_id);
 
     // 构造成功响应（使用 come.1 库的直接编码接口）
     AckEdgeOnline ack_msg;
     ack_msg.code = 0;
     ack_msg.success = true;
     ack_msg.msg = "Register success";
-    ack_msg.access_token = access_token;
+    ack_msg.touch_token = touch_token;
     ack_msg.token_type = "Bearer";
     ack_msg.expires_in = 3600;
 
@@ -387,18 +412,21 @@ void CFunRegisterSvr::handle_device_online_jsonrpc2(int client_id, const EdgeOnl
     }
 
     // 保存设备信息和上线时间（保留已有的 public_ip）
+    time_t now = time(NULL);
     auto edge_it = m_online_edges.find(client_id);
     if (edge_it != m_online_edges.end()) {
         edge_it->second.edge_id = edge_id;
         edge_it->second.edge_type = edge_type;
         edge_it->second.online_time = now;
         edge_it->second.last_heartbeat = now;
+        edge_it->second.touch_token = touch_token;
         edge_it->second.pending_manager_confirm = false;
-        ez_printf_info("touch_ingress: [EDGE.ONLINE] Edge registered successfully [client_id=%d, edge_id=%s, online_edges=%zu]\n",
+        ez_printf_info("[EDGE.ONLINE] Edge registered successfully [client_id=%d, edge_id=%s, online_edges=%zu]\n",
                client_id, edge_id.c_str(), m_online_edges.size());
     } else {
         EdgeDeviceInfo device_info(edge_id, now);
         device_info.edge_type = edge_type;
+        device_info.touch_token = touch_token;
         m_online_edges[client_id] = device_info;
     }
 
@@ -422,7 +450,7 @@ void CFunRegisterSvr::handle_device_heartbeat_jsonrpc2(int client_id, const Edge
     auto edge_it = m_online_edges.find(client_id);
     if (edge_it == m_online_edges.end()) {
         // 设备未注册，关闭连接
-        ez_printf_warning("touch_ingress: Heartbeat received from unregistered client_id=%d, closing connection\n", client_id);
+        ez_printf_warning("Heartbeat received from unregistered client_id=%d, closing connection\n", client_id);
         g_DevWsRegisterSvr.CloseClient(client_id);
         return;
     }
@@ -430,10 +458,22 @@ void CFunRegisterSvr::handle_device_heartbeat_jsonrpc2(int client_id, const Edge
     // 验证设备 ID 是否匹配
     if (edge_it->second.edge_id != edge_id) {
         // 设备 ID 不匹配，关闭连接
-        ez_printf_warning("touch_ingress: Heartbeat edge_id mismatch [client_id=%d, expected=%s, got=%s], closing connection\n",
+        ez_printf_warning("Heartbeat edge_id mismatch [client_id=%d, expected=%s, got=%s], closing connection\n",
                client_id, edge_it->second.edge_id.c_str(), edge_id.c_str());
         g_DevWsRegisterSvr.CloseClient(client_id);
         return;
+    }
+
+    // 校验 Edge 段 touch_token（分段解耦：心跳在本段应携带 Ingress 为该 edge 签发的 Edge 段 token）
+    // 仅在 Ingress 已为该 edge 签发 token 后强制校验（pending_manager_confirm 期间 token 未铺开，跳过）
+    if (!edge_it->second.touch_token.empty() && msg.touch_token != edge_it->second.touch_token) {
+        ez_printf_warning("Heartbeat invalid edge touch_token [client_id=%d, edge_id=%s, got=%s, expect=%s], closing connection\n",
+               client_id, edge_id.c_str(), msg.touch_token.c_str(), edge_it->second.touch_token.c_str());
+        g_DevWsRegisterSvr.CloseClient(client_id);
+        return;
+    }
+    if (!edge_it->second.touch_token.empty()) {
+        ez_printf_debug("Heartbeat edge touch_token verified [client_id=%d, edge_id=%s]\n", client_id, edge_id.c_str());
     }
 
     // 更新最后心跳时间
@@ -443,11 +483,11 @@ void CFunRegisterSvr::handle_device_heartbeat_jsonrpc2(int client_id, const Edge
     // 检查是否等待 Manager 确认上线
     if (edge_it->second.pending_manager_confirm) {
         // Manager 还没确认上线，再次通知
-        ez_printf_debug("touch_ingress: Edge %s heartbeat received, but manager hasn't confirmed online yet (pending=%d), re-notifying manager\n",
+        ez_printf_debug("Edge %s heartbeat received, but manager hasn't confirmed online yet (pending=%d), re-notifying manager\n",
                edge_id.c_str(), edge_it->second.pending_manager_confirm);
         notify_device_online(edge_id);
     } else {
-        ez_printf_debug("touch_ingress: Edge %s heartbeat received (confirmed)\n", edge_id.c_str());
+        ez_printf_debug("Edge %s heartbeat received (confirmed)\n", edge_id.c_str());
     }
 
     // 心跳不更新 online_since，保持连续在线时长
@@ -456,15 +496,13 @@ void CFunRegisterSvr::handle_device_heartbeat_jsonrpc2(int client_id, const Edge
 // 阶段2：处理 Manager → Ingress 的 manager.connect 通知
 void CFunRegisterSvr::handle_manager_connect_jsonrpc2(int client_id, const ManagerConnect& msg, int64_t id)
 {
-    // Manager 连接通知，无响应
-    (void)id;  // 通知不需要使用 id
-
-    ez_printf_debug("touch_ingress: [MANAGER.CONNECT] Received manager.connect [client_id=%d, manager_id=%s, ingress_id=%s]\n",
-           client_id, msg.manager_id.c_str(), msg.ingress_id.c_str());
+    // Manager 连接，返回签名 token（JSON-RPC 2.0 响应，id 用于关联）
+    ez_printf_debug("[MANAGER.CONNECT] Received manager.connect [client_id=%d, id=%lld, manager_id=%s, ingress_id=%s]\n",
+           client_id, (long long)id, msg.manager_id.c_str(), msg.ingress_id.c_str());
 
     // 如果已有 Manager 连接，拒绝新 Manager
     if (m_manager_client_id != EZ_WS_SERVER_INVALID_CLIENT_ID) {
-        ez_printf_warning("touch_ingress: [MANAGER.CONNECT] Manager already connected [existing_client_id=%d], rejecting new manager [client_id=%d, manager_id=%s]\n",
+        ez_printf_warning("[MANAGER.CONNECT] Manager already connected [existing_client_id=%d], rejecting new manager [client_id=%d, manager_id=%s]\n",
                m_manager_client_id, client_id, msg.manager_id.c_str());
         g_DevWsRegisterSvr.CloseClient(client_id);
         return;
@@ -473,7 +511,26 @@ void CFunRegisterSvr::handle_manager_connect_jsonrpc2(int client_id, const Manag
     // 保存 Manager client_id
     m_manager_client_id = client_id;
 
-    ez_printf_info("touch_ingress: [MANAGER.CONNECT] Manager connected successfully [client_id=%d, manager_id=%s, ingress_id=%s]\n",
+    // 服务端（Ingress）签发 Manager 段 touch_token（与 Edge 段对称；gen_touch_token 恒返回非空）
+    m_manager_token = gen_touch_token(TOKEN_TYPE_MANAGER, "mgr");
+
+    // 返回 manager.connect 成功响应，携带签发的 Manager 段 token
+    JsonValue result_obj;
+    result_obj.setInt("code", 0);
+    result_obj.setString("message", "Manager connected");
+    result_obj.setString("manager_id", msg.manager_id);
+    result_obj.setString("touch_token", m_manager_token);
+    result_obj.setString("token_type", "Bearer");
+    result_obj.setInt("expires_in", 3600);
+    JsonValue id_val = JsonValue::createInt64(id);
+    std::string ack_json = ComeJsonCodec::buildJsonRpcSuccess(result_obj, id_val);
+    if (!ack_json.empty()) {
+        g_DevWsRegisterSvr.SendText(client_id, ack_json.c_str(), ack_json.length());
+        ez_printf_info("[MANAGER.CONNECT] Sent manager token to manager [client_id=%d, touch_token=%s]\n",
+               client_id, m_manager_token.c_str());
+    }
+
+    ez_printf_info("[MANAGER.CONNECT] Manager connected successfully [client_id=%d, manager_id=%s, ingress_id=%s]\n",
            client_id, msg.manager_id.c_str(), msg.ingress_id.c_str());
 
     // 调用用户回调
@@ -483,12 +540,12 @@ void CFunRegisterSvr::handle_manager_connect_jsonrpc2(int client_id, const Manag
 
     // Manager 连接后，根据 EdgeReportMode 上报 Edge 状态
     int report_mode = GetEdgeReportMode();
-    ez_printf_debug("touch_ingress: [MANAGER.CONNECT] EdgeReportMode=%d, online_edges=%zu, offline_cache=%zu\n",
+    ez_printf_debug("[MANAGER.CONNECT] EdgeReportMode=%d, online_edges=%zu, offline_cache=%zu\n",
            report_mode, m_online_edges.size(), m_offline_edges_cache.size());
 
     if (report_mode == 1) {
         // 模式 1：上报所有已连接的 Edge
-        ez_printf_debug("touch_ingress: [MANAGER.CONNECT] Reporting all %zu existing edges\n", m_online_edges.size());
+        ez_printf_debug("[MANAGER.CONNECT] Reporting all %zu existing edges\n", m_online_edges.size());
         for (auto it = m_online_edges.begin(); it != m_online_edges.end(); ++it) {
             if (!it->second.edge_id.empty()) {
                 notify_device_online(it->second.edge_id);
@@ -496,7 +553,7 @@ void CFunRegisterSvr::handle_manager_connect_jsonrpc2(int client_id, const Manag
         }
     } else if (report_mode == 2) {
         // 模式 2：仅上报有变化的 Edge（当前实现：上报所有在线 Edge + 缓存的离线事件）
-        ez_printf_debug("touch_ingress: [MANAGER.CONNECT] Reporting changed edges (%zu online, %zu cached offline)\n",
+        ez_printf_debug("[MANAGER.CONNECT] Reporting changed edges (%zu online, %zu cached offline)\n",
                m_online_edges.size(), m_offline_edges_cache.size());
         // 上报在线 Edge
         for (auto it = m_online_edges.begin(); it != m_online_edges.end(); ++it) {
@@ -508,7 +565,7 @@ void CFunRegisterSvr::handle_manager_connect_jsonrpc2(int client_id, const Manag
         ReportCachedOfflineEvents();
     } else {
         // 模式 0：不上报
-        ez_printf_debug("touch_ingress: [MANAGER.CONNECT] Edge report mode 0, not reporting any edges\n");
+        ez_printf_debug("[MANAGER.CONNECT] Edge report mode 0, not reporting any edges\n");
     }
 }
 
@@ -647,53 +704,78 @@ void CFunRegisterSvr::handle_config_update_jsonrpc2(int client_id, const std::st
 
     uint64_t _tv_begin = SystemGetMSCount();
 
-    ez_printf_info("touch_ingress: [CONFIG.UPDATE] Received edge.config.update from manager [client_id=%d, json=%.100s]\n",
+    ez_printf_info("[CONFIG.UPDATE] Received edge.config.update from manager [client_id=%d, json=%.100s]\n",
            client_id, json_str.c_str());
 
     // 1. 解析 ConfigUpdate_tunnelService 消息，获取 edge_id
     ConfigUpdate_tunnelService configMsg;
     if (!ComeJsonCodec::decode(json_str, configMsg)) {
-        ez_printf_warning("touch_ingress: [CONFIG.UPDATE] Failed to decode edge.config.update from manager (client_id=%d)\n", client_id);
+        ez_printf_warning("[CONFIG.UPDATE] Failed to decode edge.config.update from manager (client_id=%d)\n", client_id);
         // 不返回错误，因为这是透传失败
         return;
     }
 
     std::string edge_id = configMsg.edge_id;
     if (edge_id.empty()) {
-        ez_printf_warning("touch_ingress: [CONFIG.UPDATE] edge.config.update without edge_id from manager (client_id=%d)\n", client_id);
+        ez_printf_warning("[CONFIG.UPDATE] edge.config.update without edge_id from manager (client_id=%d)\n", client_id);
         return;
     }
 
-    ez_printf_info("touch_ingress: [CONFIG.UPDATE] Decoded edge_id=%s from config message\n", edge_id.c_str());
+    ez_printf_info("[CONFIG.UPDATE] Decoded edge_id=%s from config message\n", edge_id.c_str());
+
+    // 1.5 校验 Manager 段 touch_token（分段解耦：config.update 在 Manager→Ingress 段应携带 Ingress 签发的 manager token）
+    if (!m_manager_token.empty() && configMsg.touch_token != m_manager_token) {
+        ez_printf_warning("[CONFIG.UPDATE] Invalid manager segment touch_token from manager (client_id=%d, edge_id=%s, got=%s, expect=%s)\n",
+               client_id, edge_id.c_str(), configMsg.touch_token.c_str(), m_manager_token.c_str());
+        return;
+    }
 
     // 2. 查找 edge_id 对应的 client_id
     int edge_client_id = EZ_WS_SERVER_INVALID_CLIENT_ID;
-    ez_printf_info("touch_ingress: [CONFIG.UPDATE] Searching for edge %s in m_online_edges (size=%zu)\n",
+    ez_printf_info("[CONFIG.UPDATE] Searching for edge %s in m_online_edges (size=%zu)\n",
            edge_id.c_str(), m_online_edges.size());
 
     for (auto it = m_online_edges.begin(); it != m_online_edges.end(); ++it) {
-        ez_printf_info("touch_ingress: [CONFIG.UPDATE] Checking m_online_edges entry: client_id=%d, edge_id=%s\n",
+        ez_printf_info("[CONFIG.UPDATE] Checking m_online_edges entry: client_id=%d, edge_id=%s\n",
                it->first, it->second.edge_id.c_str());
         if (it->second.edge_id == edge_id) {
             edge_client_id = it->first;
-            ez_printf_info("touch_ingress: [CONFIG.UPDATE] Found edge %s at client_id=%d\n", edge_id.c_str(), edge_client_id);
+            ez_printf_info("[CONFIG.UPDATE] Found edge %s at client_id=%d\n", edge_id.c_str(), edge_client_id);
             break;
         }
     }
 
     if (edge_client_id == EZ_WS_SERVER_INVALID_CLIENT_ID) {
-        ez_printf_warning("touch_ingress: [CONFIG.UPDATE] Edge %s not found for config update (manager client_id=%d, online_edges=%zu)\n",
+        ez_printf_warning("[CONFIG.UPDATE] Edge %s not found for config update (manager client_id=%d, online_edges=%zu)\n",
                edge_id.c_str(), client_id, m_online_edges.size());
-        ez_printf_warning("touch_ingress: [CONFIG.UPDATE] Edge %s is OFFLINE - config will be stored in database and sent when edge connects\n", edge_id.c_str());
+        ez_printf_warning("[CONFIG.UPDATE] Edge %s is OFFLINE - config will be stored in database and sent when edge connects\n", edge_id.c_str());
         // Edge 不在线，无法透传
         // TODO: 可以考虑返回错误给 Manager
         return;
     }
 
-    // 3. 透传配置消息给 Edge
-    ez_printf_info("touch_ingress: [CONFIG.UPDATE] About to forward config to edge %s (client_id=%d)\n", edge_id.c_str(), edge_client_id);
-    g_DevWsRegisterSvr.SendText(edge_client_id, json_str.c_str(), json_str.length());
-    ez_printf_info("touch_ingress: [CONFIG.UPDATE] Forwarded edge.config.update to edge %s (edge_client_id=%d)\n",
+    // 3. 透传配置消息给 Edge（用 Ingress 本地为该 edge 持有的 touch_token 填充，保证下行消息会话令牌正确）
+    ez_printf_info("[CONFIG.UPDATE] About to forward config to edge %s (client_id=%d)\n", edge_id.c_str(), edge_client_id);
+
+    const std::string& local_token = m_online_edges[edge_client_id].touch_token;
+    std::string forward_json = json_str;
+    if (!local_token.empty()) {
+        JsonValue msg_json = JsonValue::parse(json_str);
+        if (!msg_json.isNull() && msg_json.contains("touch_token")) {
+            msg_json.setString("touch_token", local_token);
+            forward_json = msg_json.dump();
+            ez_printf_info("[CONFIG.UPDATE] Injected local touch_token for edge %s (touch_token=%s)\n",
+                   edge_id.c_str(), local_token.c_str());
+        } else {
+            ez_printf_warning("[CONFIG.UPDATE] Cannot inject touch_token: no top-level touch_token field in config message for edge %s\n", edge_id.c_str());
+        }
+    } else {
+        ez_printf_warning("[CONFIG.UPDATE] Edge %s has no local touch_token, forwarding as-is (client_id=%d)\n",
+               edge_id.c_str(), edge_client_id);
+    }
+
+    g_DevWsRegisterSvr.SendText(edge_client_id, forward_json.c_str(), forward_json.length());
+    ez_printf_info("[CONFIG.UPDATE] Forwarded edge.config.update to edge %s (edge_client_id=%d)\n",
            edge_id.c_str(), edge_client_id);
 
     // 4. 立即返回确认响应给 Manager（异步处理，不等 Edge 响应）
@@ -711,16 +793,16 @@ void CFunRegisterSvr::handle_config_update_jsonrpc2(int client_id, const std::st
 
     std::string ack_json = ComeJsonCodec::buildJsonRpcSuccess(result_obj, id_val);
     if (!ack_json.empty()) {
-        ez_printf_info("touch_ingress: [CONFIG.UPDATE] Sending ack to manager (id=%ld, edge_id=%s)\n", (long)id, edge_id.c_str());
+        ez_printf_info("[CONFIG.UPDATE] Sending ack to manager (id=%ld, edge_id=%s)\n", (long)id, edge_id.c_str());
         g_DevWsRegisterSvr.SendText(m_manager_client_id, ack_json.c_str(), ack_json.length());
-        ez_printf_info("touch_ingress: [CONFIG.UPDATE] Sent ack to manager (id=%ld, edge_id=%s)\n", (long)id, edge_id.c_str());
+        ez_printf_info("[CONFIG.UPDATE] Sent ack to manager (id=%ld, edge_id=%s)\n", (long)id, edge_id.c_str());
     } else {
-        ez_printf_warning("touch_ingress: [CONFIG.UPDATE] Failed to build ack JSON for manager\n");
+        ez_printf_warning("[CONFIG.UPDATE] Failed to build ack JSON for manager\n");
     }
 
     uint64_t _tv_end = SystemGetMSCount();
     long _ms = (long)(_tv_end - _tv_begin);
-    ez_printf_info("touch_ingress: [LATENCY] handle_config_update_jsonrpc2 (edge_id=%s) handled in %ld ms\n", edge_id.c_str(), _ms);
+    ez_printf_info("[LATENCY] handle_config_update_jsonrpc2 (edge_id=%s) handled in %ld ms\n", edge_id.c_str(), _ms);
 }
 
 void CFunRegisterSvr::handle_config_ack_jsonrpc2(int client_id, const std::string& json_str)
@@ -731,17 +813,17 @@ void CFunRegisterSvr::handle_config_ack_jsonrpc2(int client_id, const std::strin
     uint64_t _tv_begin = SystemGetMSCount();
 
     if (!IsManagerConnected()) {
-        ez_printf_warning("touch_ingress: No manager connected, cannot forward config ack\n");
+        ez_printf_warning("No manager connected, cannot forward config ack\n");
         return;
     }
 
     // 直接透传给 Manager
     g_DevWsRegisterSvr.SendText(m_manager_client_id, json_str.c_str(), json_str.length());
-    ez_printf_info("touch_ingress: Forwarded config ack to manager\n");
+    ez_printf_info("Forwarded config ack to manager\n");
 
     uint64_t _tv_end = SystemGetMSCount();
     long _ms = (long)(_tv_end - _tv_begin);
-    ez_printf_info("touch_ingress: [LATENCY] handle_config_ack_jsonrpc2 forwarded in %ld ms\n", _ms);
+    ez_printf_info("[LATENCY] handle_config_ack_jsonrpc2 forwarded in %ld ms\n", _ms);
 }
 
 // 处理配置查询请求：透传给 Edge
@@ -752,13 +834,13 @@ void CFunRegisterSvr::handle_config_query_jsonrpc2(int client_id, const std::str
 
     uint64_t _tv_begin = SystemGetMSCount();
 
-    ez_printf_info("touch_ingress: [CONFIG.QUERY] Received edge.config.query from manager [client_id=%d, json=%.100s]\n",
+    ez_printf_info("[CONFIG.QUERY] Received edge.config.query from manager [client_id=%d, json=%.100s]\n",
            client_id, json_str.c_str());
 
     // 1. 解析查询请求，获取 edge_id
     JsonValue json = JsonValue::parse(json_str);
     if (json.isNull()) {
-        ez_printf_warning("touch_ingress: [CONFIG.QUERY] Failed to parse JSON from manager (client_id=%d)\n", client_id);
+        ez_printf_warning("[CONFIG.QUERY] Failed to parse JSON from manager (client_id=%d)\n", client_id);
         return;
     }
 
@@ -772,11 +854,11 @@ void CFunRegisterSvr::handle_config_query_jsonrpc2(int client_id, const std::str
     }
 
     if (edge_id.empty()) {
-        ez_printf_warning("touch_ingress: [CONFIG.QUERY] edge.config.query without edge_id from manager (client_id=%d)\n", client_id);
+        ez_printf_warning("[CONFIG.QUERY] edge.config.query without edge_id from manager (client_id=%d)\n", client_id);
         return;
     }
 
-    ez_printf_info("touch_ingress: [CONFIG.QUERY] Decoded edge_id=%s from query request\n", edge_id.c_str());
+    ez_printf_info("[CONFIG.QUERY] Decoded edge_id=%s from query request\n", edge_id.c_str());
 
     // 2. 查找 edge_id 对应的 client_id
     int edge_client_id = EZ_WS_SERVER_INVALID_CLIENT_ID;
@@ -788,9 +870,9 @@ void CFunRegisterSvr::handle_config_query_jsonrpc2(int client_id, const std::str
     }
 
     if (edge_client_id == EZ_WS_SERVER_INVALID_CLIENT_ID) {
-        ez_printf_warning("touch_ingress: [CONFIG.QUERY] Edge %s not found for query (manager client_id=%d, online_edges=%zu)\n",
+        ez_printf_warning("[CONFIG.QUERY] Edge %s not found for query (manager client_id=%d, online_edges=%zu)\n",
                edge_id.c_str(), client_id, m_online_edges.size());
-        ez_printf_warning("touch_ingress: [CONFIG.QUERY] Edge %s is OFFLINE - cannot query config\n", edge_id.c_str());
+        ez_printf_warning("[CONFIG.QUERY] Edge %s is OFFLINE - cannot query config\n", edge_id.c_str());
 
         // 返回错误响应给 Manager
         JsonValue error_result = JsonValue::createObject();
@@ -803,21 +885,21 @@ void CFunRegisterSvr::handle_config_query_jsonrpc2(int client_id, const std::str
         std::string err_json = ComeJsonCodec::buildJsonRpcError(-1, "Edge offline", id_val);
         if (!err_json.empty()) {
             g_DevWsRegisterSvr.SendText(client_id, err_json.c_str(), err_json.length());
-            ez_printf_info("touch_ingress: [CONFIG.QUERY] Sent error response to manager (edge %s offline)\n", edge_id.c_str());
+            ez_printf_info("[CONFIG.QUERY] Sent error response to manager (edge %s offline)\n", edge_id.c_str());
         }
         return;
     }
 
     // 3. 透传查询请求给 Edge
-    ez_printf_info("touch_ingress: [CONFIG.QUERY] Forwarding query to edge %s (client_id=%d)\n", edge_id.c_str(), edge_client_id);
+    ez_printf_info("[CONFIG.QUERY] Forwarding query to edge %s (client_id=%d)\n", edge_id.c_str(), edge_client_id);
     g_DevWsRegisterSvr.SendText(edge_client_id, json_str.c_str(), json_str.length());
-    ez_printf_info("touch_ingress: [CONFIG.QUERY] Forwarded edge.config.query to edge %s\n", edge_id.c_str());
+    ez_printf_info("[CONFIG.QUERY] Forwarded edge.config.query to edge %s\n", edge_id.c_str());
 
     // 注意：不等 Edge 响应，由 Edge 直接回复 Manager
 
     uint64_t _tv_end = SystemGetMSCount();
     long _ms = (long)(_tv_end - _tv_begin);
-    ez_printf_info("touch_ingress: [LATENCY] handle_config_query_jsonrpc2 (edge_id=%s) handled in %ld ms\n", edge_id.c_str(), _ms);
+    ez_printf_info("[LATENCY] handle_config_query_jsonrpc2 (edge_id=%s) handled in %ld ms\n", edge_id.c_str(), _ms);
 }
 
 // ==============================
@@ -828,7 +910,7 @@ void CFunRegisterSvr::CacheEdgeOfflineEvent(const std::string& edge_id, const Ed
 {
     // 缓存 Edge 离线事件
     m_offline_edges_cache[edge_id] = edge_info;
-    ez_printf_debug("touch_ingress: Cached offline event for edge %s at %ld\n", edge_id.c_str(), edge_info.online_time);
+    ez_printf_debug("Cached offline event for edge %s at %ld\n", edge_id.c_str(), edge_info.online_time);
 }
 
 void CFunRegisterSvr::ClearEdgeOfflineCache(const std::string& edge_id)
@@ -837,7 +919,7 @@ void CFunRegisterSvr::ClearEdgeOfflineCache(const std::string& edge_id)
     auto it = m_offline_edges_cache.find(edge_id);
     if (it != m_offline_edges_cache.end()) {
         m_offline_edges_cache.erase(it);
-        ez_printf_debug("touch_ingress: Cleared offline cache for edge %s\n", edge_id.c_str());
+        ez_printf_debug("Cleared offline cache for edge %s\n", edge_id.c_str());
     }
 }
 
@@ -845,16 +927,16 @@ void CFunRegisterSvr::ReportCachedOfflineEvents()
 {
     // 上报缓存的离线事件（等待 Manager 确认）
     if (m_offline_edges_cache.empty()) {
-        ez_printf_debug("touch_ingress: No cached offline events to report\n");
+        ez_printf_debug("No cached offline events to report\n");
         return;
     }
 
-    ez_printf_debug("touch_ingress: Reporting %zu cached offline events (waiting for manager confirm)\n", m_offline_edges_cache.size());
+    ez_printf_debug("Reporting %zu cached offline events (waiting for manager confirm)\n", m_offline_edges_cache.size());
     for (auto it = m_offline_edges_cache.begin(); it != m_offline_edges_cache.end(); ++it) {
         if (!it->second.pending_manager_confirm) {
             notify_device_offline(it->second.edge_id);
             it->second.pending_manager_confirm = true;  // 标记为等待确认
-            ez_printf_debug("touch_ingress: Sent offline notification for edge %s, waiting for confirm\n", it->second.edge_id.c_str());
+            ez_printf_debug("Sent offline notification for edge %s, waiting for confirm\n", it->second.edge_id.c_str());
         }
     }
 }
@@ -865,7 +947,7 @@ void CFunRegisterSvr::HandleManagerOnlineConfirmResponse(const std::string& edge
     for (auto it = m_online_edges.begin(); it != m_online_edges.end(); ++it) {
         if (it->second.edge_id == edge_id) {
             it->second.pending_manager_confirm = false;
-            ez_printf_debug("touch_ingress: Manager confirmed online for edge %s (client_id=%d)\n", edge_id.c_str(), it->first);
+            ez_printf_debug("Manager confirmed online for edge %s (client_id=%d)\n", edge_id.c_str(), it->first);
             return;
         }
     }
@@ -878,7 +960,7 @@ void CFunRegisterSvr::HandleManagerOfflineConfirmResponse(const std::string& edg
     if (it != m_offline_edges_cache.end()) {
         it->second.pending_manager_confirm = false;
         m_offline_edges_cache.erase(it);
-        ez_printf_debug("touch_ingress: Manager confirmed offline for edge %s, removed from cache\n", edge_id.c_str());
+        ez_printf_debug("Manager confirmed offline for edge %s, removed from cache\n", edge_id.c_str());
     }
 }
 
@@ -893,7 +975,7 @@ int32_t CFunRegisterSvr::NotifyManagerEdgeOnline(int client_id, const std::strin
 {
     // 检查 Manager 是否连接
     if (!IsManagerConnected()) {
-        ez_printf_warning("touch_ingress: No manager connected, cannot notify for edge %s\n", edge_id.c_str());
+        ez_printf_warning("No manager connected, cannot notify for edge %s\n", edge_id.c_str());
         return 0;
     }
 
@@ -923,7 +1005,7 @@ int32_t CFunRegisterSvr::NotifyManagerEdgeOnline(int client_id, const std::strin
     std::string req_json = ComeJsonCodec::encodeJsonRpcRequest(msg, COME_METHOD_INGRESS_EDGE_ONLINE, req_id);
     if (!req_json.empty()) {
         g_DevWsRegisterSvr.SendText(m_manager_client_id, req_json.c_str(), req_json.length());
-        ez_printf_debug("touch_ingress: Sent edge.online request to manager for edge %s (req_id=%d, client_id=%d, public_ip=%s)\n",
+        ez_printf_debug("Sent edge.online request to manager for edge %s (req_id=%d, client_id=%d, public_ip=%s)\n",
                edge_id.c_str(), req_id, client_id, msg.public_ip.c_str());
 
         // 记录等待状态
@@ -945,7 +1027,7 @@ void CFunRegisterSvr::notify_device_online(const std::string& edge_id)
 {
     // 检查 Manager 是否连接
     if (!IsManagerConnected()) {
-        ez_printf_warning("touch_ingress: [NOTIFY.ONLINE] No manager connected, cannot notify for edge %s\n", edge_id.c_str());
+        ez_printf_warning("[NOTIFY.ONLINE] No manager connected, cannot notify for edge %s\n", edge_id.c_str());
         return;
     }
 
@@ -975,7 +1057,7 @@ void CFunRegisterSvr::notify_device_online(const std::string& edge_id)
     std::string req_json = ComeJsonCodec::encodeJsonRpcRequest(msg, COME_METHOD_INGRESS_EDGE_ONLINE, req_id);
     if (!req_json.empty()) {
         g_DevWsRegisterSvr.SendText(m_manager_client_id, req_json.c_str(), req_json.length());
-        ez_printf_debug("touch_ingress: [NOTIFY.ONLINE] Sent to manager [edge_id=%s, edge_type=%s, req_id=%d, manager_client_id=%d]\n",
+        ez_printf_debug("[NOTIFY.ONLINE] Sent to manager [edge_id=%s, edge_type=%s, req_id=%d, manager_client_id=%d]\n",
                edge_id.c_str(), edge_type.c_str(), req_id, m_manager_client_id);
     }
 }
@@ -984,7 +1066,7 @@ void CFunRegisterSvr::notify_device_offline(const std::string& edge_id)
 {
     // 检查 Manager 是否连接
     if (!IsManagerConnected()) {
-        ez_printf_warning("touch_ingress: [NOTIFY.OFFLINE] No manager connected, cannot notify for edge %s\n", edge_id.c_str());
+        ez_printf_warning("[NOTIFY.OFFLINE] No manager connected, cannot notify for edge %s\n", edge_id.c_str());
         return;
     }
 
@@ -1002,7 +1084,7 @@ void CFunRegisterSvr::notify_device_offline(const std::string& edge_id)
         // 防止重复发送：检查 Manager 连接是否仍然有效
         if (IsManagerConnected()) {
             g_DevWsRegisterSvr.SendText(m_manager_client_id, req_json.c_str(), req_json.length());
-            ez_printf_debug("touch_ingress: [NOTIFY.OFFLINE] Sent to manager [edge_id=%s, req_id=%d, manager_client_id=%d]\n",
+            ez_printf_debug("[NOTIFY.OFFLINE] Sent to manager [edge_id=%s, req_id=%d, manager_client_id=%d]\n",
                    edge_id.c_str(), req_id, m_manager_client_id);
         }
     }
@@ -1016,6 +1098,33 @@ bool CFunRegisterSvr::verify_device(const std::string& edge_id, const std::strin
     }
     // 当前实现：接受所有非空验证
     return true;
+}
+// 服务端（Ingress）签发分段 touch_token（Edge 段/Manager 段）
+std::string CFunRegisterSvr::gen_touch_token(TouchTokenType type, const std::string& prefix)
+{
+    (void)type;
+    uint64_t _tv_begin = SystemGetMSCount();
+    char rand_buf[8] = {0};
+    bool has_rand = (ez_rand_buf(rand_buf, sizeof(rand_buf)) > 0);
+    if (!has_rand) {
+        // 随机源失败：跳过随机盐（仅用 prefix+时间），仍正常签发，避免阻塞
+        ez_printf_error("[TOKEN] ez_rand_buf failed, issuing touch_token without random salt for prefix=%s\n", prefix.c_str());
+    }
+
+    // 对 prefix 字节 + 时间字节（+ 8 字节随机数，若可用）做 SHA256（分次置入；随机数防重放），hex 编码后返回
+    unsigned char buf[SHA256_BLOCK_SIZE];
+    SHA256_CTX ctx;
+    sha256_init(&ctx);
+    sha256_update(&ctx, (const unsigned char*)prefix.c_str(), prefix.size());
+    sha256_update(&ctx, (const unsigned char*)&_tv_begin, sizeof(_tv_begin));
+    if (has_rand) {
+        sha256_update(&ctx, (const unsigned char*)rand_buf, sizeof(rand_buf));
+    }
+    sha256_final(&ctx, buf);
+
+    char hex_buf[SHA256_BLOCK_SIZE * 2 + 1];
+    bin_to_hex_string(hex_buf, sizeof(hex_buf), buf, sizeof(buf));
+    return std::string(hex_buf);
 }
 
 void CFunRegisterSvr::kick_device(const std::string& edge_id)
@@ -1039,7 +1148,7 @@ void CFunRegisterSvr::kick_device(const std::string& edge_id)
             //   2. 从 m_online_edges 中删除该条目
             // 所以这里不需要主动删除，避免 double erase 导致崩溃
             g_DevWsRegisterSvr.CloseClient(client_id);
-            ez_printf_info("touch_ingress: [KICK] Kicked edge %s (client_id=%d)\n", edge_id.c_str(), client_id);
+            ez_printf_info("[KICK] Kicked edge %s (client_id=%d)\n", edge_id.c_str(), client_id);
 
             // 不再主动 erase，让 SIGNAL_DISCONNECTED 回调处理
             return;
@@ -1048,5 +1157,5 @@ void CFunRegisterSvr::kick_device(const std::string& edge_id)
 
     // Edge 不在在线列表中，可能已经自然断开
     // 此时 SIGNAL_DISCONNECTED 回调已经处理了离线通知，无需额外操作
-    ez_printf_debug("touch_ingress: [KICK] Edge %s not found in online list (may have already disconnected)\n", edge_id.c_str());
+    ez_printf_debug("[KICK] Edge %s not found in online list (may have already disconnected)\n", edge_id.c_str());
 }

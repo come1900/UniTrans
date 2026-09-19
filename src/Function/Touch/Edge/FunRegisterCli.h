@@ -65,7 +65,7 @@ private:
     std::string m_edge_id;
     std::string m_edge_key;
     std::string m_edge_type;
-    std::string m_token;  // 从注册响应中获取的 access_token
+    std::string m_token;  // 从注册响应中获取的 touch_token
 
     bool m_started;
     OnRegisterResultProc_t m_on_register_result;

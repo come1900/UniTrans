@@ -191,7 +191,7 @@ void CDevWsRegisterCli::s_on_connected(void *user_data)
 {
     CDevWsRegisterCli *self = (CDevWsRegisterCli *)user_data;
     if (self) {
-        ez_printf_info("touch_edge: WebSocket connected to ingress\n");
+        ez_printf_info("WebSocket connected to ingress\n");
         CEZLock lock(self->m_MutexSigBuffer);
         // 触发统一信号：SIGNAL_CONNECTED, NULL, 0, status(0=成功), 0
         self->m_SigNotify(SIGNAL_CONNECTED, NULL, 0, 0, 0);
@@ -202,7 +202,7 @@ void CDevWsRegisterCli::s_on_disconnected(void *user_data)
 {
     CDevWsRegisterCli *self = (CDevWsRegisterCli *)user_data;
     if (self) {
-        ez_printf_warning("touch_edge: WebSocket disconnected from ingress\n");
+        ez_printf_warning("WebSocket disconnected from ingress\n");
         CEZLock lock(self->m_MutexSigBuffer);
         // 触发统一信号：SIGNAL_DISCONNECTED, NULL, 0, error_code(0=正常断开), 0
         self->m_SigNotify(SIGNAL_DISCONNECTED, NULL, 0, 0, 0);

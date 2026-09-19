@@ -755,7 +755,7 @@ def update_edge_config():
                 return jsonify({'code': 50004, 'message': 'Ingress not connected'}), 503
 
             # 8. 构造 ConfigUpdate_tunnelService 格式的消息（符合 come.1 库的编解码格式）
-            # 注意：edge_id、config_type、version、access_token、config_content 都在顶层，不在 params 中
+            # 注意：edge_id、config_type、version、touch_token、config_content 都在顶层，不在 params 中
             import json
             logger.info(f"Edge {edge_id} config: Building ConfigUpdate_tunnelService message")
             logger.info(f"  - config_data: {json.dumps(config_data, ensure_ascii=False)}")
@@ -785,7 +785,7 @@ def update_edge_config():
                 'edge_id': edge_id,  # 顶层字段！
                 'config_type': 'tunnelService',
                 'version': new_version,  # 使用锁内原子分配的唯一版本号（避免 ORM 对象被并发刷新读到过期值）
-                'access_token': '',  # TODO: 从注册时获取
+                'touch_token': getattr(ingress_client, 'manager_token', '') or '',  # Manager↔Ingress 段 token（Ingress 签发）；Ingress 下行时会换成 Edge 段 token
                 'config_content': [  # 注意：是 config_content 不是 configContent
                     {
                         'serviceName': 'tunnelService',

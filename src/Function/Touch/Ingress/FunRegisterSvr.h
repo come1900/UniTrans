@@ -35,6 +35,12 @@ enum ClientType {
     CLIENT_TYPE_MANAGER = 2    // Manager 管理端
 };
 
+// 分段会话 token 类型（服务端 Ingress 统一签发）
+enum TouchTokenType {
+    TOKEN_TYPE_EDGE = 0,       // Edge 段（edge.online 时签发，前缀为 edge_id）
+    TOKEN_TYPE_MANAGER = 1     // Manager 段（manager.connect 时签发，前缀 mgr_）
+};
+
 // Edge 设备信息结构（仅用于 Edge 设备）
 struct EdgeDeviceInfo {
     std::string edge_id;
@@ -42,6 +48,7 @@ struct EdgeDeviceInfo {
     time_t online_time;         // 上线时间（UTC 秒）
     std::string public_ip;      // 边缘公网 IP（从 WebSocket 连接获取）
     std::string edge_type;      // 边缘类型
+    std::string touch_token;    // 本段会话签发的 touch_token（Ingress 本地管理，供透传下发时填充）
 
     // Manager 确认状态
     bool pending_manager_confirm;   // 是否等待 Manager 确认上线（true=等待中，false=已确认/无需确认）
@@ -104,6 +111,9 @@ private:
     // Manager 连接的 client_id（Ingress 只能有一个 Manager）
     int m_manager_client_id;
 
+    // Manager 段 touch_token（Ingress 在 manager.connect 时签发，用于 Manager↔Ingress 段通讯安全）
+    std::string m_manager_token;
+
     // Edge 上报模式（Manager 连接后）
     // 0 - 不上报
     // 1 - 上报所有已连接的 Edge（默认）
@@ -155,6 +165,10 @@ private:
 
     // 验证设备（简单实现：检查 key 是否匹配）
     bool verify_device(const std::string& edge_id, const std::string& device_key);
+
+    // 服务端（Ingress）签发分段 touch_token（Edge 段/Manager 段）
+    // prefix 为 token 前缀：Edge 段传 edge_id、Manager 段传 "mgr"
+    std::string gen_touch_token(TouchTokenType type, const std::string& prefix);
 
     // 踢掉指定设备（被 manager 调用）
     void kick_device(const std::string& edge_id);

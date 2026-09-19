@@ -23,6 +23,9 @@
 #include <sys/stat.h>  // for chmod
 #include <fstream>     // for file reading
 
+#include <sha256.h>
+#include <str_opr.h>
+
 #include "../../../Logs.h"
 
 // 静态成员变量定义
@@ -126,12 +129,25 @@ bool CFunRegisterCli::RegisterEdge(bool is_power_on)
         return false;
     }
 
-    // 生成随机 nonce
-    char nonce_buf[33];
-    srand(time(NULL));
-    snprintf(nonce_buf, sizeof(nonce_buf), "%08x%08x%08x%08x",
-             rand(), rand(), rand(), rand());
-    std::string nonce(nonce_buf);
+    static const char hex[] = "0123456789abcdef";
+
+    // 生成随机 nonce（16 字节 CSPRNG，hex 编码 32 字符，业界常见挑战-响应长度）
+    std::string nonce;
+    char rand_buf[16] = {0};
+    size_t rand_len = ez_rand_buf(rand_buf, sizeof(rand_buf));
+    if (rand_len > 0) {
+        nonce.reserve(rand_len * 2);
+        for (size_t i = 0; i < rand_len; ++i) {
+            nonce += hex[(rand_buf[i] >> 4) & 0xF];
+            nonce += hex[rand_buf[i] & 0xF];
+        }
+    } else {
+        // 随机源失败：退回时间戳保证 nonce 非空，注册不被阻塞
+        ez_printf_error("ez_rand_buf failed, falling back to timestamp nonce\n");
+        char fallback[32];
+        snprintf(fallback, sizeof(fallback), "%lx", (unsigned long)time(NULL));
+        nonce = fallback;
+    }
 
     // 阶段1：使用 EdgeOnline 数据结构构造 JSON-RPC 2.0 请求
     EdgeOnline edge_online;
@@ -139,8 +155,23 @@ bool CFunRegisterCli::RegisterEdge(bool is_power_on)
     edge_online.key = m_edge_key;
     edge_online.type = m_edge_type;
     edge_online.nonce = nonce;
-    edge_online.token = "";  // token 从 Manager 获取，这里为空
-    
+
+    // 计算签名：SHA256(key + id + nonce)，hex 编码 64 字符；hash 分段输入，无需拼接中间串
+    unsigned char digest[SHA256_BLOCK_SIZE];
+    SHA256_CTX ctx;
+    sha256_init(&ctx);
+    sha256_update(&ctx, (const unsigned char*)edge_online.key.c_str(), edge_online.key.size());
+    sha256_update(&ctx, (const unsigned char*)edge_online.id.c_str(), edge_online.id.size());
+    sha256_update(&ctx, (const unsigned char*)edge_online.nonce.c_str(), edge_online.nonce.size());
+    sha256_final(&ctx, digest);
+
+    char hex_buf[SHA256_BLOCK_SIZE * 2 + 1];
+    bin_to_hex_string(hex_buf, sizeof(hex_buf), digest, sizeof(digest));
+    edge_online.sign.assign(hex_buf);
+
+    ez_printf_info("edge.online built: id=%s nonce=%s sign=%s\n",
+                   m_edge_id.c_str(), nonce.c_str(), edge_online.sign.c_str());
+
     // 生成请求 ID（使用时间戳）
     time_t now = time(NULL);
     int64_t req_id = static_cast<int64_t>(now);
@@ -205,7 +236,7 @@ void CFunRegisterCli::send_heartbeat()
     // 阶段 1：使用 EdgeHeartbeat 数据结构构造 JSON-RPC 2.0 通知
     EdgeHeartbeat heartbeat;
     heartbeat.id = m_edge_id;
-    heartbeat.access_token = m_token;  // 使用注册时获取的 token
+    heartbeat.touch_token = m_token;  // 使用注册时获取的 token
     heartbeat.timestamp = timestamp;
 
     // 使用 ComeJsonCodec 编码为 JSON-RPC 2.0 通知格式（无 id）
@@ -223,7 +254,7 @@ void CFunRegisterCli::send_heartbeat()
         return;
     }
 
-    ez_printf_info("Heartbeat sent at %s\n", timestamp);
+    ez_printf_info("Heartbeat sent at %s (touch_token=%s)\n", timestamp, m_token.c_str());
 }
 
 void CFunRegisterCli::OnWebsocketNotify(CDevWsRegisterCli::SignalType sig_type, const void *data, size_t len, int param1, int param2)
@@ -365,7 +396,7 @@ void CFunRegisterCli::handle_receive(const void *data, size_t len)
             ez_printf_info("=== [CONFIG.UPDATE.RECV] Received ConfigUpdate_tunnelService for edge %s ===\n", configMsg.edge_id.c_str());
             ez_printf_info("  - config_type: %s\n", configMsg.config_type.c_str());
             ez_printf_info("  - version: %ld\n", (long)configMsg.version);
-            ez_printf_info("  - access_token: %s\n", configMsg.access_token.c_str());
+            ez_printf_info("  - touch_token: %s\n", configMsg.touch_token.c_str());
             ez_printf_info("  - configContent.services.size(): %zu\n", configMsg.configContent.services.size());
             if (!configMsg.configContent.services.empty()) {
                 auto& svc = configMsg.configContent.services[0];
@@ -388,6 +419,17 @@ void CFunRegisterCli::handle_receive(const void *data, size_t len)
                 ez_printf_error("Edge ID mismatch: expected %s, got %s\n", m_edge_id.c_str(), configMsg.edge_id.c_str());
                 send_config_ack_error(req_id, -1, "Edge ID mismatch");
                 return;
+            }
+
+            // 校验下行 Edge 段 touch_token（Ingress 透传时已换成本 Edge 段 token，应与本 Edge 持有的会话 token 一致）
+            if (!m_token.empty() && configMsg.touch_token != m_token) {
+                ez_printf_error("Invalid edge touch_token in config.update: got %s, expect %s, rejecting config\n",
+                       configMsg.touch_token.c_str(), m_token.c_str());
+                send_config_ack_error(req_id, -1, "Invalid touch_token");
+                return;
+            }
+            if (!m_token.empty()) {
+                ez_printf_info("Verified edge touch_token in config.update OK\n");
             }
 
             // 1. 转换为 FrpcConfig
@@ -449,10 +491,10 @@ void CFunRegisterCli::handle_register_ack_jsonrpc2(const AckEdgeOnline& ack)
     // 使用 AckEdgeOnline 结构中的字段
     bool success = ack.success;
     std::string msg = ack.msg;
-    std::string access_token = ack.access_token;
+    std::string touch_token = ack.touch_token;
 
-    // 保存 access_token 供后续使用
-    m_token = access_token;
+    // 保存 touch_token 供后续使用
+    m_token = touch_token;
 
     // 调用用户回调
     if (m_on_register_result) {
@@ -460,7 +502,7 @@ void CFunRegisterCli::handle_register_ack_jsonrpc2(const AckEdgeOnline& ack)
     }
 
     if (!success) {
-        ez_printf_error("touch_edge: Edge registration failed [edge_id=%s, msg=%s]\n",
+        ez_printf_error("Edge registration failed [edge_id=%s, msg=%s]\n",
                         m_edge_id.c_str(), msg.c_str());
         return;
     }
@@ -468,7 +510,7 @@ void CFunRegisterCli::handle_register_ack_jsonrpc2(const AckEdgeOnline& ack)
     // 注册成功，启动心跳
     m_registered = true;
     StartHeartbeat();
-    ez_printf_info("touch_edge: Edge registered successfully [edge_id=%s, heartbeat started]\n",
+    ez_printf_info("Edge registered successfully [edge_id=%s, heartbeat started]\n",
                    m_edge_id.c_str());
 }
 
@@ -480,7 +522,7 @@ void CFunRegisterCli::handle_register_ack_jsonrpc2_error(int32_t error_code, con
         m_on_register_result(false, error_msg, m_user_data);
     }
 
-    ez_printf_error("touch_edge: Edge registration failed [edge_id=%s, code=%d, msg=%s]\n",
+    ez_printf_error("Edge registration failed [edge_id=%s, code=%d, msg=%s]\n",
            m_edge_id.c_str(), error_code, error_msg.c_str());
 }
 

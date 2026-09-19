@@ -276,6 +276,185 @@ curl -X POST http://localhost:18051/api/v1/edges/batch-reject \
 
 ---
 
+## frpc 远程配置接口
+
+> frpc 远程配置（Edge 配置）的 REST 接口。请求中 `edge_id` 放消息体（RPC 风格 body 式约定）；配置内容使用**嵌套权威结构**（`serverAddr`/`serverPort`/`auth`/`webServer`/`proxies`）。
+>
+> 三个接口的语义差异：
+> - `config/update`（保存并下发）：**以数据库/platform 为准**，下发到 Edge。
+> - `config/get`（从平台加载）：**以数据库为准**；DB 有配置直接返回；DB 无配置且 Edge 在线时同步读一次 edge 本地配置并回填 DB；均无则返回后端默认。
+> - `config/sync`（从设备同步）：**以 edge 前端为准**，读 edge 本地配置并做一致性核对。
+
+### POST /api/v1/edges/config/update - 保存并下发配置
+
+保存配置到数据库，并将配置下发到 Edge。Edge 离线时配置暂存数据库，待上线后应用。
+
+**请求参数**（嵌套权威结构）：
+```json
+{
+  "edge_id": "edge001",
+  "config_type": "tunnelService",
+  "config_content": {
+    "serverAddr": "10.220.42.139",
+    "serverPort": 50400,
+    "auth": {"method": "token", "token": "test-token-123"},
+    "transport": {"tls": {"enable": true}},
+    "webServer": {"addr": "127.0.0.1", "port": 17400},
+    "proxies": [
+      {"name": "w-tcp-51422", "type": "tcp", "localIP": "127.0.0.1",
+       "localPort": 55555, "remotePort": 51422, "description": "pss service"}
+    ]
+  }
+}
+```
+
+**响应（成功，Edge 在线已发送）**：
+```json
+{
+  "code": 0,
+  "message": "Config message sent, waiting for edge confirmation",
+  "config_version": 1
+}
+```
+
+**响应（去重命中，配置不变）**：
+```json
+{
+  "code": 0,
+  "message": "Config already confirmed and unchanged",
+  "config_version": 1
+}
+```
+
+**响应（Edge 离线，配置暂存数据库）**：
+```json
+{
+  "code": 0,
+  "message": "Config saved (edge offline, will be applied when online)",
+  "config_version": 1
+}
+```
+
+**错误响应**：
+- `503` `{"code":50008,"message":"Config update in progress, please try later","config_version":N}` —— 同一 edge 配置下发进行中（节流）
+- `503` `{"code":50004,"message":"Ingress not connected"}` —— Ingress 未连接
+- `500` `{"code":50007,"message":"...Failed to send config message to ingress..."}` —— 发送到 ingress 失败
+
+> REST 收到**嵌套权威结构**（`proxies`），Manager 内部转换为 `ConfigUpdate_tunnelService`（`accessPolicies` 与 `tunnelService` 同级）后通过 WebSocket 发送给 Edge。
+
+---
+
+### POST /api/v1/edges/config/get - 从平台加载配置
+
+查询配置。**以数据库为准**：DB 有配置直接返回；DB 无配置且 Edge 在线时同步读一次 edge 本地配置并回填 DB；均无则返回后端默认。
+
+**请求参数**：
+```json
+{"edge_id": "edge001"}
+```
+
+**响应**：
+```json
+{
+  "code": 0,
+  "message": "success",
+  "config": {
+    "serverAddr": "10.220.42.139",
+    "serverPort": 50400,
+    "auth": {"method": "token", "token": ""},
+    "transport": {"tls": {"enable": true}},
+    "webServer": {"addr": "127.0.0.1", "port": 17400},
+    "proxies": []
+  },
+  "config_version": 1,
+  "config_status": "confirmed",
+  "config_matched": true,
+  "config_sync": "matched"
+}
+```
+
+**响应字段说明**：
+- `config`：嵌套权威结构；DB 无配置时返回后端默认值（`_default_edge_config()`）
+- `config_version`：当前配置版本号
+- `config_status`：`unknown` / `configuring` / `confirmed` / `pending` / `config_failed`
+- `config_matched`：DB 与 edge 前端一致性核对结果（`true`/`false`/`null`）
+- `config_sync`：一致性状态（`matched`/`mismatch`/`missing`/`bad`/`None`）
+  - `matched`：DB 与 edge 相同
+  - `mismatch`：DB 与 edge 不一致
+  - `missing`：edge 在线但本地配置文件不存在/无法打开（顶层 JSON-RPC `error`）
+  - `bad`：edge 在线但本地配置文件解析失败（`result.config_error`）
+  - `None`：无法核对（DB 或 edge 均无配置/离线）
+
+**错误响应**：
+- `500` `{"code":50002,"message":"Database error"}` —— 数据库错误
+- `500` `{"code":50001,"message":"Internal error"}` —— 内部错误
+
+---
+
+### POST /api/v1/edges/config/sync - 从设备同步配置
+
+从 Edge 读取本地配置，并与数据库做一致性核对。**以 edge 前端为准**；仅当数据库无配置时才用 edge 值回填 DB（避免覆盖用户已保存的 manager 为准配置）。
+
+**请求参数**：
+```json
+{"edge_id": "edge001"}
+```
+
+**响应**：
+```json
+{
+  "code": 0,
+  "message": "success",
+  "config": {
+    "serverAddr": "10.220.42.139",
+    "serverPort": 50400,
+    "auth": {"method": "token", "token": ""},
+    "transport": {"tls": {"enable": true}},
+    "webServer": {"addr": "127.0.0.1", "port": 17400},
+    "proxies": []
+  },
+  "config_status": "confirmed",
+  "config_version": 1,
+  "differ": false,
+  "sync_state": "same",
+  "sync_at": 1757800000000,
+  "edge_unreadable": false,
+  "edge_reachable": true,
+  "edge_local_missing": false,
+  "edge_local_bad": false
+}
+```
+
+**响应字段说明**：
+- `config`：edge 前端返回的实际配置（`_canonical_config` 规范化后的嵌套权威结构）；edge 不可读时为 `null`
+- `differ`：DB 与 edge 是否不一致（`true`/`false`/`null`）
+- `sync_state`：同步状态
+  - `same`：edge 可读且与 DB 一致
+  - `differ`：edge 可读且与 DB 不一致
+  - `missing`：edge 在线但本地配置文件不存在/无法打开
+  - `bad`：edge 在线但本地配置文件解析失败
+  - `unreadable`：edge 在线但配置不可读（兜底）
+  - `unreachable`：edge 离线或无法通信
+- `sync_at`：最近一次 DB 与 edge 同步核对的毫秒时间戳（`edge_configs.synced_at`）
+- `edge_reachable` / `edge_unreadable` / `edge_local_missing` / `edge_local_bad`：edge 可达性/可读性细分标志
+
+**错误响应**：
+- `500` `{"code":50001,"message":"Internal error"}` —— 内部错误
+
+**一致性核对逻辑**（`sync_state` 判定优先级）：
+```
+edge 在线且配置可读：
+  differ = (db_canonical != edge_canonical)
+  differ==False -> 'same'
+  differ==True  -> 'differ'
+edge 在线但文件不存在（顶层 error）  -> 'missing'
+edge 在线但解析失败（config_error）  -> 'bad'
+edge 在线但其他不可读              -> 'unreadable'
+edge 离线或无法通信               -> 'unreachable'
+```
+
+---
+
 ## Ingress 管理接口
 
 ### POST /api/v1/ingresses/list - 查询 Ingress 列表
@@ -426,6 +605,11 @@ curl -X POST http://localhost:18051/api/v1/ingresses/delete \
 | 50001 | 内部错误 |
 | 50002 | 数据库错误 |
 | 50003 | 服务不可用 |
+| 50004 | Ingress 未连接（配置下发时） |
+| 50005 | 配置下发失败（如 Edge 写入配置文件失败） |
+| 50006 | 配置文件不存在 |
+| 50007 | 配置消息发送到 Ingress 失败 |
+| 50008 | 配置下发进行中（节流，请稍后重试） |
 
 **错误响应示例：**
 ```json
@@ -472,7 +656,12 @@ curl -X POST http://localhost:18051/api/v1/ingresses/delete \
 ## 边缘认证
 
 - **边缘注册**：使用 `edge_id` 和 `edge_key` 进行身份验证
-- **Token 认证**：边缘注册成功后获得 `access_token`，用于与 ingress 建立 WebSocket 连接
+- **Edge 段会话 token**：边缘注册成功后，Ingress 签发 `touch_token`（Edge 段）返回，边缘用于与 ingress 的本段通讯
+
+## Manager ↔ Ingress 认证
+
+- **Manager 段会话 token**：Manager 连接 Ingress 时发送 `manager.connect`（带 `id`），Ingress 签发 `touch_token`（Manager 段，为 `"mgr"` 字节 + 时间计数 + 8 字节随机数的 SHA256 hex 摘要）返回；Manager 保存并于本段消息携带。
+- **分段解耦**：`touch_token` 按通讯段划分（Edge 段 / Manager 段），**不要求全链路一致**；`touch_token` 是对 `prefix` 字节 + 原始毫秒时间计数字节 + 8 字节随机数做 SHA256 得到的 64 位 hex 摘要（Edge 段 prefix = `edge_id`，Manager 段 prefix = `"mgr"`，随机数由 `ez_rand_buf` 生成、防重放，由 `FunRegisterSvr::gen_touch_token` 统一签发）。Ingress 为唯一签发方，并在透传下行消息（如 `edge.config.update`）时**校验 Manager 段 token 后换成 Edge 段 token** 再转发。详见 [spec-api-websocket-jsonrpc.md](spec-api-websocket-jsonrpc.md)。
 
 ## Web UI 认证
 
@@ -515,6 +704,7 @@ curl -X POST http://localhost:18051/api/v1/ingresses/delete \
 
 | 消息类型 | 方法名 | 方向 | 说明 |
 |----------|--------|------|------|
+| Manager 连接 | `manager.connect` | Manager → Ingress | 连接请求（带 id）；Ingress 签发 Manager 段 touch_token 返回 |
 | 边缘上线通知 | `ingress.edge.online` | Ingress → Manager | Ingress 通知 Manager 边缘上线 |
 | 边缘下线通知 | `ingress.edge.offline` | Ingress → Manager | Ingress 通知 Manager 边缘下线 |
 | 踢边缘命令 | `manager.edge.kick` | Manager → Ingress | Manager 命令 Ingress 踢掉边缘 |
@@ -532,7 +722,7 @@ curl -X POST http://localhost:18051/api/v1/ingresses/delete \
     "edge_type": "touch",
     "edge_key": "key001",
     "nonce": "xxx",
-    "token": ""
+    "sign": ""
   },
   "id": 12345
 }
@@ -544,7 +734,7 @@ curl -X POST http://localhost:18051/api/v1/ingresses/delete \
   "jsonrpc": "2.0",
   "result": {
     "success": true,
-    "access_token": "xxx",
+    "touch_token": "9f2b4d8a1c3e6f0a2b5c7d9e1f3a4b6c8d0e2f4a6b8c0d2e4f6a8b0c2d4e6f8a",
     "expires_in": 3600
   },
   "id": 12345

@@ -114,7 +114,7 @@ void to_json(json& j, const EdgeOnline& msg) {
         {"key", msg.key},
         {"type", msg.type},
         {"nonce", msg.nonce},
-        {"token", msg.token}
+        {"sign", msg.sign}
     };
 }
 
@@ -123,7 +123,7 @@ void from_json(const json& j, EdgeOnline& msg) {
     msg.key = get_field_value<std::string>(j, "key", "");
     msg.type = get_field_value<std::string>(j, "type", "");
     msg.nonce = get_field_value<std::string>(j, "nonce", "");
-    msg.token = get_field_value<std::string>(j, "token", "");
+    msg.sign = get_field_value<std::string>(j, "sign", "");
 }
 
 std::string ComeJsonCodec::encode(const EdgeOnline& msg) {
@@ -158,7 +158,7 @@ void to_json(json& j, const AckEdgeOnline& msg) {
         {"code", msg.code},
         {"msg", msg.msg},
         {"success", msg.success},
-        {"access_token", msg.access_token},
+        {"touch_token", msg.touch_token},
         {"token_type", msg.token_type},
         {"expires_in", msg.expires_in}
     };
@@ -168,7 +168,7 @@ void from_json(const json& j, AckEdgeOnline& msg) {
     msg.code = get_field_value<int32_t>(j, "code", 0);
     msg.msg = get_field_value<std::string>(j, "msg", "");
     msg.success = get_field_value<bool>(j, "success", false);
-    msg.access_token = get_field_value<std::string>(j, "access_token", "");
+    msg.touch_token = get_field_value<std::string>(j, "touch_token", "");
     msg.token_type = get_field_value<std::string>(j, "token_type", "Bearer");
     msg.expires_in = get_field_value<int32_t>(j, "expires_in", 0);
 }
@@ -202,14 +202,14 @@ bool ComeJsonCodec::decode(const std::string& jsonStr, AckEdgeOnline& msg) {
 void to_json(json& j, const EdgeReport& msg) {
     j = json{
         {"id", msg.id},
-        {"access_token", msg.access_token},
+        {"touch_token", msg.touch_token},
         {"data", msg.data}
     };
 }
 
 void from_json(const json& j, EdgeReport& msg) {
     msg.id = get_field_value<std::string>(j, "id", "");
-    msg.access_token = get_field_value<std::string>(j, "access_token", "");
+    msg.touch_token = get_field_value<std::string>(j, "touch_token", "");
     if (j.contains("data") && j["data"].is_object()) {
         try {
             msg.data = j["data"].get<std::map<std::string, std::string>>();
@@ -386,14 +386,14 @@ bool ComeJsonCodec::decode(const std::string& jsonStr, AckServerCommand& msg) {
 void to_json(json& j, const EdgeHeartbeat& msg) {
     j = json{
         {"id", msg.id},
-        {"access_token", msg.access_token},
+        {"touch_token", msg.touch_token},
         {"timestamp", msg.timestamp}
     };
 }
 
 void from_json(const json& j, EdgeHeartbeat& msg) {
     msg.id = get_field_value<std::string>(j, "id", "");
-    msg.access_token = get_field_value<std::string>(j, "access_token", "");
+    msg.touch_token = get_field_value<std::string>(j, "touch_token", "");
     msg.timestamp = get_field_value<std::string>(j, "timestamp", "");
 }
 
@@ -468,7 +468,7 @@ void to_json(json& j, const ConfigUpdate& msg) {
         {"config_type", msg.config_type},
         {"config_content", msg.config_content},
         {"version", msg.version},
-        {"access_token", msg.access_token}
+        {"touch_token", msg.touch_token}
     };
 }
 
@@ -477,7 +477,7 @@ void from_json(const json& j, ConfigUpdate& msg) {
     msg.config_type = get_field_value<std::string>(j, "config_type", "");
     msg.config_content = get_field_value<std::string>(j, "config_content", "");
     msg.version = get_field_value<int32_t>(j, "version", 0);
-    msg.access_token = get_field_value<std::string>(j, "access_token", "");
+    msg.touch_token = get_field_value<std::string>(j, "touch_token", "");
 }
 
 std::string ComeJsonCodec::encode(const ConfigUpdate& msg) {
@@ -822,7 +822,7 @@ void to_json(json& j, const ConfigUpdate_tunnelService& msg) {
     j["edge_id"] = msg.edge_id;
     j["config_type"] = msg.config_type;
     j["version"] = msg.version;
-    j["access_token"] = msg.access_token;
+    j["touch_token"] = msg.touch_token;
     
     // config_content 字段：嵌套的配置内容
     j["config_content"] = msg.configContent;
@@ -833,7 +833,7 @@ void from_json(const json& j, ConfigUpdate_tunnelService& msg) {
     msg.edge_id = get_field_value<std::string>(j, "edge_id", "");
     msg.config_type = get_field_value<std::string>(j, "config_type", "");
     msg.version = get_field_value<int32_t>(j, "version", 0);
-    msg.access_token = get_field_value<std::string>(j, "access_token", "");
+    msg.touch_token = get_field_value<std::string>(j, "touch_token", "");
 
     // config_content 字段：数组形式的配置内容
     if (j.contains("config_content") && j["config_content"].is_array()) {
@@ -924,13 +924,13 @@ bool ComeJsonCodec::toFrpcConfig(const ConfigUpdate_tunnelService& msg, FrpcConf
 }
 
 bool ComeJsonCodec::fromFrpcConfig(const FrpcConfig& frpcCfg, const std::string& edge_id,
-                                   int32_t version, const std::string& access_token,
+                                   int32_t version, const std::string& touch_token,
                                    ConfigUpdate_tunnelService& msg) {
     // 设置基类字段
     msg.edge_id = edge_id;
     msg.config_type = "tunnelService";
     msg.version = version;
-    msg.access_token = access_token;
+    msg.touch_token = touch_token;
 
     // 清空并创建配置内容
     msg.configContent.services.clear();
@@ -981,7 +981,7 @@ void to_json(json& j, const IngressLoadReport& msg) {
         {"cpu_usage", msg.cpu_usage},
         {"memory_usage", msg.memory_usage},
         {"timestamp", msg.timestamp},
-        {"access_token", msg.access_token}
+        {"touch_token", msg.touch_token}
     };
 }
 
@@ -991,7 +991,7 @@ void from_json(const json& j, IngressLoadReport& msg) {
     msg.cpu_usage = get_field_value<double>(j, "cpu_usage", 0.0);
     msg.memory_usage = get_field_value<double>(j, "memory_usage", 0.0);
     msg.timestamp = get_field_value<std::string>(j, "timestamp", "");
-    msg.access_token = get_field_value<std::string>(j, "access_token", "");
+    msg.touch_token = get_field_value<std::string>(j, "touch_token", "");
 }
 
 std::string ComeJsonCodec::encode(const IngressLoadReport& msg) {
@@ -1063,14 +1063,14 @@ void to_json(json& j, const ManagerCommand& msg) {
         {"command_type", msg.command_type},
         {"target_id", msg.target_id},
         {"params", msg.params},
-        {"access_token", msg.access_token}
+        {"touch_token", msg.touch_token}
     };
 }
 
 void from_json(const json& j, ManagerCommand& msg) {
     msg.command_type = get_field_value<std::string>(j, "command_type", "");
     msg.target_id = get_field_value<std::string>(j, "target_id", "");
-    msg.access_token = get_field_value<std::string>(j, "access_token", "");
+    msg.touch_token = get_field_value<std::string>(j, "touch_token", "");
     if (j.contains("params") && j["params"].is_object()) {
         try {
             msg.params = j["params"].get<std::map<std::string, std::string>>();
@@ -1448,6 +1448,13 @@ int64_t JsonValue::getInt64(const std::string& key, int64_t defaultVal) const {
     if (!m_impl) return defaultVal;
     try {
         json* j = static_cast<json*>(m_impl);
+        // key 为空：直接获取标量整数（用于 JSON-RPC 的标量 id 值）
+        if (key.empty()) {
+            if (j->is_number_integer()) {
+                return j->get<int64_t>();
+            }
+            return defaultVal;
+        }
         if (j->contains(key) && (*j)[key].is_number_integer()) {
             return (*j)[key].get<int64_t>();
         }

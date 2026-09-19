@@ -55,6 +55,8 @@ class IngressClient:
         self._reconnect_interval = 10  # seconds
         self._edge_list_futures = {}  # 存储边缘列表查询的 Future 对象
         self._query_id_counter = 0  # 查询 ID 计数器
+        self._handshake_req_id = None  # manager.connect 请求 id（用于匹配 Ingress 返回的 token 响应）
+        self.manager_token = None  # Ingress 签发的 Manager 段 touch_token（服务端签发）
 
     def start(self):
         """Start the WebSocket client in a background thread."""
@@ -191,8 +193,9 @@ class IngressClient:
             await asyncio.sleep(self._reconnect_interval)
 
     async def _send_handshake(self):
-        """Send initial handshake message to ingress."""
-        # 阶段 2：发送 JSON-RPC 2.0 通知：manager.connect
+        """Send initial handshake request to ingress and remember the request id."""
+        # 阶段 2：发送 JSON-RPC 2.0 请求：manager.connect（带 id，Ingress 返回签发的 Manager 段 token）
+        self._handshake_req_id = self.generate_request_id()
         handshake = {
             "jsonrpc": "2.0",
             "method": MANAGER_CONNECT,
@@ -200,9 +203,10 @@ class IngressClient:
                 "manager_id": "touch_manager",
                 "ingress_id": self.ingress_id,
                 "timestamp": datetime.utcnow().isoformat() + "Z"
-            }
+            },
+            "id": self._handshake_req_id
         }
-        logger.info(f"Sending manager.connect notification to ingress {self.ingress_id}: {handshake}")
+        logger.info(f"Sending manager.connect request to ingress {self.ingress_id}: {handshake}")
         await self.send_message(handshake)
 
     async def _receive_messages(self):
@@ -328,7 +332,20 @@ class IngressClient:
             elif "result" in data or "error" in data:
                 # 响应消息
                 req_id = data.get("id")
-                
+
+                # 先处理 manager.connect 响应（Ingress 签发 Manager 段 token）
+                # 注意：其 result 含 code/message，与 AckConfigUpdate 结构相似，故须在此优先判定
+                if req_id is not None and getattr(self, '_handshake_req_id', None) == req_id:
+                    result = data.get("result", {})
+                    token = result.get("touch_token") if isinstance(result, dict) else None
+                    if token:
+                        self.manager_token = token
+                        logger.info(f"Received Manager segment touch_token from ingress {self.ingress_id} (id={req_id}, touch_token=%.20s)" % token)
+                    else:
+                        logger.warning(f"manager.connect response without touch_token from ingress {self.ingress_id}: {data}")
+                    # connect 响应已消费，不再走后续响应分支
+                    return
+
                 # 检查是否为 frpc 远程配置响应（AckConfigUpdate）
                 if "result" in data:
                     result = data["result"]
