@@ -18,6 +18,8 @@
 #ifndef WS_TRANSPORT_H
 #define WS_TRANSPORT_H
 
+// #include <cstdint>
+#include <stdint.h>
 #include <string>
 #include <functional>
 #include <pthread.h>
