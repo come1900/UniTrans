@@ -70,7 +70,7 @@ SQLite database file: `touch_manager.db` (created automatically)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | 18050 | HTTP server port |
+| `TOUCH_MANAGER_PORT` | 18050 | HTTP server port |
 | `DATABASE_PATH` | `touch_manager.db` | SQLite database path |
 | `WEBSOCKET_PING_INTERVAL` | 15 | WebSocket ping interval (seconds), should be ~1/2 of server interval |
 | `WEBSOCKET_PING_TIMEOUT` | 5 | WebSocket pong timeout (seconds), should be 1/3 of interval |

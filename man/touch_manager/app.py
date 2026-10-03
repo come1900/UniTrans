@@ -105,7 +105,7 @@ if __name__ == '__main__':
     try:
         # Get port from environment or use default
         from config import Config
-        port = Config.PORT
+        port = Config.TOUCH_MANAGER_PORT
         host = os.getenv('HOST', '0.0.0.0')
 
         logger.info(f"Starting touch_manager on {host}:{port}")

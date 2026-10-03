@@ -36,7 +36,8 @@ public:
     virtual ~CFunRegisterCli();
 
     // 启动/停止
-    void Start(const char *server_addr, unsigned short port, int reconnect_max_retries = 0);
+    void Start(const char *server_addr, unsigned short port, int reconnect_max_retries = 0,
+               int tls_enable = 1, int tls_verify_peer = 1, const char *tls_ca_path = NULL);
     void Stop();
 
     // 更新边缘参数（允许在配置加载后重新设置）

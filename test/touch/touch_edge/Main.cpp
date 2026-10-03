@@ -45,6 +45,9 @@ static const char *arg_edge_id = NULL;        // -i, --edge-id
 static const char *arg_edge_key = NULL;       // -k, --edge-key
 static const char *arg_edge_type = NULL;      // -t, --edge-type
 static const char *arg_local_ip = NULL;       // -L, --local-ip
+static int arg_wss = 0;                       // -w, --wss（TLS wss，默认关）
+static int arg_no_verify = 0;                 // -n, --no-verify（wss 仅加密不认证）
+static const char *arg_tls_ca = NULL;         // -a, --tls-ca
 static int arg_help = 0;                      // -h, --help
 
 // 位置参数列表（arglist 规范）
@@ -59,6 +62,9 @@ static struct option long_options[] = {
     {"edge-key",    required_argument, 0, 'k'},
     {"edge-type",   required_argument, 0, 't'},
     {"local-ip",    required_argument, 0, 'L'},
+    {"wss",         no_argument,       0, 'w'},
+    {"no-verify",   no_argument,       0, 'n'},
+    {"tls-ca",      required_argument, 0, 'a'},
     {"help",        no_argument,       0, 'h'},
     {0, 0, 0, 0}
 };
@@ -91,6 +97,9 @@ void print_usage(const char *prog)
     printf("  -k, --edge-key <key>     Edge key (default: %s)\n", DEFAULT_EDGE_KEY);
     printf("  -t, --edge-type <type>   Edge type (default: %s)\n", DEFAULT_EDGE_TYPE);
     printf("  -L, --local-ip <ip>      Local IP address (default: %s)\n", DEFAULT_LOCAL_IP);
+    printf("  -w, --wss                Use TLS wss (default: plaintext ws)\n");
+    printf("  -n, --no-verify          wss: encrypt only, skip cert verify\n");
+    printf("  -a, --tls-ca <file>      wss: CA file to verify server cert\n");
     printf("  -h, --help               Show this help message\n");
     printf("\n");
     printf("Positional arguments (arglist, in order):\n");
@@ -109,7 +118,7 @@ int main(int argc, char *argv[])
     int option_index = 0;
     
     // 使用 getopt_long 解析命令行参数
-    while ((opt = getopt_long(argc, argv, "H:P:i:k:t:L:h", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "H:P:i:k:t:L:wna:h", long_options, &option_index)) != -1) {
         switch (opt) {
             case 'H':
                 arg_host = optarg;
@@ -128,6 +137,15 @@ int main(int argc, char *argv[])
                 break;
             case 'L':
                 arg_local_ip = optarg;
+                break;
+            case 'w':
+                arg_wss = 1;
+                break;
+            case 'n':
+                arg_no_verify = 1;
+                break;
+            case 'a':
+                arg_tls_ca = optarg;
                 break;
             case 'h':
                 arg_help = 1;
@@ -169,7 +187,10 @@ int main(int argc, char *argv[])
                            (arglist_count > 5 ? arglist[5] : DEFAULT_LOCAL_IP);
     ARG_USED(local_ip);
 
-    printf("touch_edge: Connecting to ingress %s:%d\n", ingress_host, ingress_port);
+    int tls_enable = arg_wss ? 1 : 0;
+    int tls_verify_peer = arg_no_verify ? 0 : 1;
+    printf("touch_edge: Connecting to ingress %s:%d (%s)\n", ingress_host, ingress_port,
+           tls_enable ? "wss" : "ws");
     printf("Edge ID: %s, Type: %s\n", edge_id, edge_type);
 
     // 初始化 ezThread
@@ -185,7 +206,8 @@ int main(int argc, char *argv[])
 
     // 启动（连接到 ingress 并注册）
     // reconnect_max_retries=-1：无限重连，与正式 touchEdge-linux 行为一致
-    register_cli.Start(ingress_host, ingress_port, -1);
+    // tls_enable: -w 启用 wss；tls_verify_peer: -n 跳过校验
+    register_cli.Start(ingress_host, ingress_port, -1, tls_enable, tls_verify_peer, arg_tls_ca);
 
     // 主循环：仅等待退出信号，重连由 ezsocket 内部处理
     printf("touch_edge running, press Ctrl+C to exit...\n");

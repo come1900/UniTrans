@@ -10,9 +10,11 @@ import asyncio
 import json
 import logging
 import os
+import ssl
 import time
 import websockets
 from datetime import datetime
+from urllib.parse import urlsplit
 from typing import Optional, Dict, Callable
 from threading import Thread, Event
 from config import Config
@@ -38,14 +40,42 @@ def _fix_no_proxy():
 
 _fix_no_proxy()
 
+
+def ws_base(url: str) -> str:
+    """归一化 ws/wss URL 的基础部分 scheme://host:port，用于配置比对。"""
+    p = urlsplit(url)
+    return f"{p.scheme.lower()}://{p.hostname}:{p.port or (443 if p.scheme.lower() == 'wss' else 80)}"
+
+
+def _client_ssl_context(scheme: str):
+    """按 scheme 生成 WS 客户端 SSL 上下文：ws:// 返回 None；wss:// 用 INGRESS_CA_FILE 校验。"""
+    if scheme != 'wss':
+        return None
+    if Config.INGRESS_SSL_VERIFY:
+        ctx = ssl.create_default_context(cafile=Config.INGRESS_CA_FILE or None)
+        # 内置 CA 叶子证书 CN=ez-wss-server 无 SAN；按设计「内置 CA 互认」（与 edge 一致），
+        # 保持 CA 校验（防伪造/防 MITM），但不做主机名绑定（ingress IP 随部署变化）。
+        ctx.check_hostname = False
+        return ctx
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
+
+
 class IngressClient:
     """WebSocket client for connecting to touch_ingress."""
 
-    def __init__(self, ingress_id: str, host: str, port: int):
+    def __init__(self, ingress_id: str, url: str):
         self.ingress_id = ingress_id
-        self.host = host
-        self.port = port
-        self.ws_url = f"ws://{host}:{port}/come"
+        parsed = urlsplit(url)
+        self.scheme = parsed.scheme.lower()
+        self.host = parsed.hostname
+        self.port = parsed.port or (443 if self.scheme == 'wss' else 80)
+        self.base_url = f"{self.scheme}://{self.host}:{self.port}"
+        path = (parsed.path or '').rstrip('/') or '/come'
+        self.ws_url = f"{self.base_url}{path}"
+        self.ssl_context = _client_ssl_context(self.scheme)
         self.websocket = None
         self.connected = False
         self.running = False
@@ -118,6 +148,7 @@ class IngressClient:
                     # - interval=15s, timeout=5s 可以在 20 秒内检测到连接问题
                     websocket = await websockets.connect(
                         self.ws_url,
+                        ssl=self.ssl_context,
                         subprotocols=["come.1"],  # Try with subprotocol first
                         ping_interval=Config.WEBSOCKET_PING_INTERVAL,
                         ping_timeout=Config.WEBSOCKET_PING_TIMEOUT,
@@ -130,6 +161,7 @@ class IngressClient:
                     logger.warning(f"Connection with subprotocol failed, retrying without: {e}")
                     websocket = await websockets.connect(
                         self.ws_url,
+                        ssl=self.ssl_context,
                         ping_interval=Config.WEBSOCKET_PING_INTERVAL,
                         ping_timeout=Config.WEBSOCKET_PING_TIMEOUT,
                         close_timeout=5,

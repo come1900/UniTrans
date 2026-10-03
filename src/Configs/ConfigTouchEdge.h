@@ -28,6 +28,12 @@ typedef struct tagConfigTouchEdge
     std::string strIngressHost;  // Ingress 服务器地址
     int iIngressPort;            // Ingress 服务器端口
 
+    // wss/TLS 配置（wss 翻切：默认启用，连 ingress wss 端口）
+    int iWssEnable;              // 0=明文 ws，1=TLS wss（默认 1）
+    int iWssPort;                // wss 端口（默认 54443，iWssEnable=1 时使用）
+    int iTlsVerifyPeer;          // wss 时是否校验服务端证书（1=默认，内置 CA 互认；0=仅加密）
+    std::string strTlsCaPath;    // wss 校验服务端所用 CA（空=内置/系统 CA）
+
     std::string strEdgeId;     // 设备 ID
     std::string strEdgeKey;    // 设备密钥
     std::string strEdgeType;   // 设备类型

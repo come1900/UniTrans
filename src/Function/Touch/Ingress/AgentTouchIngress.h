@@ -34,6 +34,13 @@ typedef struct __AgentTouchIngressCfg
     std::string strProtocol;      // WebSocket 协议
     std::string strPathPrefix;    // WebSocket 路径前缀
 
+    // WSS/TLS 配置（明文 ws 之上可选叠加的 TLS wss 实例）
+    int iWssEnable;               // 0=仅明文 ws（默认），1=同时启动 TLS wss 实例
+    unsigned short iWssPort;      // wss 监听端口（iWssEnable=1 时使用，默认 54443）
+    std::string strTlsCertPath;   // wss 服务端证书（空→内置 CA 互认档）
+    std::string strTlsKeyPath;    // wss 服务端私钥（空→内置 CA 互认档）
+    std::string strTlsCaPath;     // wss 客户端 mTLS 校验 CA（可选）
+
     int iConnTimeOut;             // 连接超时
 
     // Edge 上报模式（Manager 连接后）
@@ -48,6 +55,11 @@ typedef struct __AgentTouchIngressCfg
         Port = 54321;
         strProtocol = "come.1";
         strPathPrefix = "/come";
+        iWssEnable = 0;
+        iWssPort = 54443;
+        strTlsCertPath = "";
+        strTlsKeyPath = "";
+        strTlsCaPath = "";
         iConnTimeOut = 5;
         EdgeReportMode = 1;  // 默认：上报所有已连接的 Edge
     }

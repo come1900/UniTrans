@@ -30,6 +30,11 @@ CDevWsRegisterCli* CDevWsRegisterCli::instance()
 CDevWsRegisterCli::CDevWsRegisterCli()
     : CEZThread("CDevWsRegisterCli", THREAD_PRIORITY_DEFAULT)
     , m_ws_handle(NULL)
+#ifdef _FUNC_TouchEdge_EnableTls
+    , m_wss_handle(NULL)
+#endif
+    , m_tls_enable(true)
+    , m_tls_verify_peer(true)
     , m_SigNotify(2/*SIGNAL_NODE_NEW*/)
     , m_iUser(0)
 {
@@ -42,7 +47,9 @@ CDevWsRegisterCli::~CDevWsRegisterCli()
 
 bool CDevWsRegisterCli::Start(const char *server_addr, unsigned short port,
                               const char *url_path, const char *protocol,
-                              int reconnect_max_retries)
+                              int reconnect_max_retries,
+                              int tls_enable, int tls_verify_peer,
+                              const char *tls_ca_path)
 {
     // 参数检查
     if (!server_addr || server_addr[0] == '\0') {
@@ -57,38 +64,82 @@ bool CDevWsRegisterCli::Start(const char *server_addr, unsigned short port,
         return true;  // 已经启动
     }
 
-    // 配置 WebSocket 客户端
-    struct ez_ws_client_config config = {0};
-    config.server_addr = server_addr;
-    config.port = port;
-    config.url_path = url_path ? url_path : "/come";
-    config.protocol = protocol ? protocol : "come.1";
-    config.connect_timeout_ms = 5000;
-    config.reconnect_interval_ms = 3000;
-    // 持续重连：设置为 0 表示不限重试次数，终端持续尝试与 ingress 建立连接
-    config.reconnect_max_retries = reconnect_max_retries;
-    config.reconnect_backoff_enable = 1;
-    config.reconnect_backoff_min_retries = 2;
-    config.reconnect_backoff_high_threshold = 5;
+    m_tls_enable = tls_enable != 0;
+    m_tls_verify_peer = tls_verify_peer != 0;
+    m_tls_ca_path = tls_ca_path ? tls_ca_path : "";
 
-    // 设置回调
+#ifndef _FUNC_TouchEdge_EnableTls
+    // wss 未编译（未定义 _FUNC_TouchEdge_EnableTls），强制使用明文 ws
+    m_tls_enable = false;
+    m_tls_verify_peer = false;
+#endif
+
+    const char *urlp = url_path ? url_path : "/come";
+    const char *protop = protocol ? protocol : "come.1";
+
+    // 设置回调（明文与 wss 共用同类型回调结构）
     struct ez_ws_callbacks callbacks = {0};
     callbacks.on_receive = s_on_receive;
     callbacks.on_connected = s_on_connected;
     callbacks.on_disconnected = s_on_disconnected;
     callbacks.user_data = this;
 
-    // 创建 WebSocket 客户端句柄
-    m_ws_handle = ez_ws_client_handle_create(&config, &callbacks);
-    if (!m_ws_handle) {
-        return false;
-    }
+    if (m_tls_enable) {
+#ifdef _FUNC_TouchEdge_EnableTls
+        // ---------- TLS wss 客户端 ----------
+        struct ez_wss_client_config config = {0};
+        config.server_addr = server_addr;
+        config.port = port;
+        config.url_path = urlp;
+        config.protocol = protop;
+        config.connect_timeout_ms = 5000;
+        config.reconnect_interval_ms = 3000;
+        config.reconnect_max_retries = reconnect_max_retries;
+        config.reconnect_backoff_enable = 1;
+        config.reconnect_backoff_min_retries = 2;
+        config.reconnect_backoff_high_threshold = 5;
+        config.tls_enable = 1;
+        config.tls_verify_peer = m_tls_verify_peer ? 1 : 0;
+        config.tls_ca_path = m_tls_ca_path.empty() ? NULL : m_tls_ca_path.c_str();
 
-    // 启动 ezThread 自驱动线程
-    if (CreateThread() != EZTHREAD_BOOL_TRUE) {
-        ez_ws_client_cleanup(m_ws_handle);
-        m_ws_handle = NULL;
+        m_wss_handle = ez_wss_client_handle_create(&config, &callbacks);
+        if (!m_wss_handle) {
+            return false;
+        }
+
+        if (CreateThread() != EZTHREAD_BOOL_TRUE) {
+            ez_wss_client_cleanup(m_wss_handle);
+            m_wss_handle = NULL;
+            return false;
+        }
+#else
+        // wss 未编译，不应进入此分支（m_tls_enable 已被强制为 false）
         return false;
+#endif
+    } else {
+        // ---------- 明文 ws 客户端 ----------
+        struct ez_ws_client_config config = {0};
+        config.server_addr = server_addr;
+        config.port = port;
+        config.url_path = urlp;
+        config.protocol = protop;
+        config.connect_timeout_ms = 5000;
+        config.reconnect_interval_ms = 3000;
+        config.reconnect_max_retries = reconnect_max_retries;
+        config.reconnect_backoff_enable = 1;
+        config.reconnect_backoff_min_retries = 2;
+        config.reconnect_backoff_high_threshold = 5;
+
+        m_ws_handle = ez_ws_client_handle_create(&config, &callbacks);
+        if (!m_ws_handle) {
+            return false;
+        }
+
+        if (CreateThread() != EZTHREAD_BOOL_TRUE) {
+            ez_ws_client_cleanup(m_ws_handle);
+            m_ws_handle = NULL;
+            return false;
+        }
     }
 
     return true;
@@ -103,10 +154,19 @@ bool CDevWsRegisterCli::Stop()
     m_bLoop = EZTHREAD_BOOL_FALSE;
     DestroyThread(EZTHREAD_BOOL_TRUE);
 
-    // 清理 WebSocket 客户端
-    if (m_ws_handle) {
-        ez_ws_client_cleanup(m_ws_handle);
-        m_ws_handle = NULL;
+    // 清理 WebSocket 客户端（按 tls_enable 选择明文或 wss）
+    if (m_tls_enable) {
+#ifdef _FUNC_TouchEdge_EnableTls
+        if (m_wss_handle) {
+            ez_wss_client_cleanup(m_wss_handle);
+            m_wss_handle = NULL;
+        }
+#endif
+    } else {
+        if (m_ws_handle) {
+            ez_ws_client_cleanup(m_ws_handle);
+            m_ws_handle = NULL;
+        }
     }
 
     return true;
@@ -140,6 +200,16 @@ bool CDevWsRegisterCli::Stop(CEZObject *pObj, DevWsRegisterCliSignalProc_t pProc
 
 int CDevWsRegisterCli::SendText(const char *data, size_t len)
 {
+    if (m_tls_enable) {
+#ifdef _FUNC_TouchEdge_EnableTls
+        if (!m_wss_handle) {
+            return -1;
+        }
+        return ez_wss_send_text(m_wss_handle, data, len);
+#else
+        return -1;
+#endif
+    }
     if (!m_ws_handle) {
         return -1;
     }
@@ -148,6 +218,16 @@ int CDevWsRegisterCli::SendText(const char *data, size_t len)
 
 int CDevWsRegisterCli::SendBinary(const void *data, size_t len)
 {
+    if (m_tls_enable) {
+#ifdef _FUNC_TouchEdge_EnableTls
+        if (!m_wss_handle) {
+            return -1;
+        }
+        return ez_wss_send_binary(m_wss_handle, data, len);
+#else
+        return -1;
+#endif
+    }
     if (!m_ws_handle) {
         return -1;
     }
@@ -156,6 +236,16 @@ int CDevWsRegisterCli::SendBinary(const void *data, size_t len)
 
 bool CDevWsRegisterCli::IsConnected() const
 {
+    if (m_tls_enable) {
+#ifdef _FUNC_TouchEdge_EnableTls
+        if (!m_wss_handle) {
+            return false;
+        }
+        return ez_wss_is_connected(m_wss_handle) != 0;
+#else
+        return false;
+#endif
+    }
     if (!m_ws_handle) {
         return false;
     }
@@ -166,13 +256,28 @@ void CDevWsRegisterCli::ThreadProc()
 {
     // ezThread 自驱动循环
     while (m_bLoop) {
-        if (m_ws_handle) {
-            int ret = ez_ws_service_exec(m_ws_handle, 100);
-            if (ret < 0) {
-                break;
+        if (m_tls_enable) {
+#ifdef _FUNC_TouchEdge_EnableTls
+            if (m_wss_handle) {
+                int ret = ez_wss_service_exec(m_wss_handle, 100);
+                if (ret < 0) {
+                    break;
+                }
+            } else {
+                SystemSleep(100);  // 等待 100ms
             }
+#else
+            SystemSleep(100);  // wss 未编译，不应进入此分支
+#endif
         } else {
-            SystemSleep(100);  // 等待 100ms
+            if (m_ws_handle) {
+                int ret = ez_ws_service_exec(m_ws_handle, 100);
+                if (ret < 0) {
+                    break;
+                }
+            } else {
+                SystemSleep(100);  // 等待 100ms
+            }
         }
     }
 }

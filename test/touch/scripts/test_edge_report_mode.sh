@@ -63,14 +63,14 @@ cleanup_data() {
     print_pass "日志已清理"
 
     # 清理数据库
-    local db_file="$HOME/svn/daily/src/appmodule/UniTrans/man/touch_manager/t-touch_manager.db"
+    local db_file="$HOME/svn/come1900/UniTrans/man/touch_manager/t-touch_manager.db"
     if [ -f "$db_file" ]; then
         rm -f "$db_file"
         print_pass "数据库已清理"
     fi
 
     # 重新初始化数据库
-    cd $HOME/svn/daily/src/appmodule/UniTrans/man/touch_manager
+    cd $HOME/svn/come1900/UniTrans/man/touch_manager
     python migrate_db.py 2>/dev/null || true
     print_pass "数据库已重新初始化"
 }
@@ -131,9 +131,9 @@ start_edge() {
 start_manager() {
     print_header "启动 Manager"
 
-    cd $HOME/svn/daily/src/appmodule/UniTrans/man/touch_manager
+    cd $HOME/svn/come1900/UniTrans/man/touch_manager
     source wpyenv/bin/activate
-    DEFAULT_INGRESS_ID='local-127.0.0.1' DEFAULT_INGRESS_HOST='127.0.0.1' DATABASE_NAME='t-touch_manager.db' PORT='18051' python app.py &
+    DEFAULT_INGRESS_ID='local-127.0.0.1' DEFAULT_INGRESS_URL='ws://127.0.0.1:54321' DATABASE_NAME='t-touch_manager.db' TOUCH_MANAGER_PORT='18051' python app.py &
     sleep 5
 
     # 验证 Manager

@@ -20,7 +20,12 @@ template<> void exchangeTable<ConfigTouchEdge>(CConfigExchange& xchg, CConfigTab
 {
     xchg.exchange(table, "IngressHost"    , config.strIngressHost    , "47.100.49.48");
     xchg.exchange(table, "IngressPort"    , config.iIngressPort    , 1, 65535, 54321);
-    
+
+    xchg.exchange(table, "WssEnable"    , config.iWssEnable    , 0, 1, 1);
+    xchg.exchange(table, "WssPort"    , config.iWssPort    , 1, 65535, 54443);
+    xchg.exchange(table, "TlsVerifyPeer"    , config.iTlsVerifyPeer    , 0, 1, 1);
+    xchg.exchange(table, "TlsCaPath"    , config.strTlsCaPath    , "");
+
     xchg.exchange(table, "EdgeId"    , config.strEdgeId    , def_Default_TouchEdge_Name);
     xchg.exchange(table, "EdgeKey"    , config.strEdgeKey    , "key001");
     xchg.exchange(table, "EdgeType"    , config.strEdgeType    , "touch");

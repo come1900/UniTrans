@@ -17,10 +17,10 @@ set -u
 
 MANAGER_URL="${MANAGER_URL:-http://localhost:18051}"
 EDGE_ID="${EDGE_ID:-edge001}"
-EDGE_LOG="/home/10312200/svn/daily/src/come1900/UniTrans/test/touch/touch_edge/_edge.log"
+EDGE_LOG="/home/10312200/svn/come1900/UniTrans/test/touch/touch_edge/_edge.log"
 # edge 的 ez_wsclient 原生 RECV/SEND(含完整 JSON 与 version 字段)输出到该文件
 EDGE_RECV_LOG="${EDGE_RECV_LOG:-/tmp/touch_edge_001.log}"
-INGRESS_LOG="/home/10312200/svn/daily/src/come1900/UniTrans/test/touch/touch_ingress/_ingress.log"
+INGRESS_LOG="/home/10312200/svn/come1900/UniTrans/test/touch/touch_ingress/_ingress.log"
 ROUNDS="${1:-10}"
 
 # millisecond epoch: for日志时间戳换算
@@ -78,10 +78,10 @@ print_row "POST->Manager 返回(API 处理耗时)" "$((T_PUSH_RESP-T_PUSH_START)
 
 # 等待 edge 应用并确认：直接查询数据库 config_status（避免 GET 触发后台
 # refresh_config 污染时序，sleep 用 0.1 减小轮询量化误差）
-MANAGER_DB="/home/10312200/svn/daily/src/come1900/UniTrans/man/touch_manager/t-touch_manager.db"
+MANAGER_DB="/home/10312200/svn/come1900/UniTrans/man/touch_manager/t-touch_manager.db"
 T_CONFIRMED=0
 for i in $(seq 1 60); do
-    ST=$(cd /home/10312200/svn/daily/src/come1900/UniTrans/man/touch_manager && wpyenv/bin/python -c "
+    ST=$(cd /home/10312200/svn/come1900/UniTrans/man/touch_manager && wpyenv/bin/python -c "
 import sqlite3
 c=sqlite3.connect('$MANAGER_DB')
 print(c.execute(\"SELECT config_status FROM edges WHERE edge_id='$EDGE_ID'\").fetchone()[0])

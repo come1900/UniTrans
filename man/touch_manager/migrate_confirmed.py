@@ -8,7 +8,7 @@ confirmed: 99=pending, 1=confirmed (whitelist), 0=rejected (blacklist)
 import sqlite3
 import os
 
-DATABASE_PATH = os.path.expanduser('~/svn/daily/src/appmodule/touch/touch_manager/touch_manager.db')
+DATABASE_PATH = os.path.expanduser('~/svn/come1900/UniTrans/man/touch_manager/touch_manager.db')
 
 def migrate():
     """Migrate confirmed field from boolean to integer."""

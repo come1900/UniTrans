@@ -2,7 +2,8 @@
 # touch_system_monitor.sh - 监控系统运行状态
 # 每 10 分钟检查一次 touch 系统三个组件的运行状态
 
-LOG_FILE="$HOME/svn/daily/src/appmodule/touch/system_monitor.log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+LOG_FILE="$SCRIPT_DIR/../system_monitor.log"
 MANAGER_URL="http://localhost:18050"
 
 log() {

@@ -819,7 +819,7 @@ if (ComeJsonCodec::decode(recv_json, ack)) {
 #### 编译和安装
 
 ```bash
-cd $HOME/svn/daily/src/appmodule/touch/come.1
+cd $HOME/svn/come1900/UniTrans/libs/come.1
 make          # 编译库
 make install  # 安装到 $HOME/libs/
 ```

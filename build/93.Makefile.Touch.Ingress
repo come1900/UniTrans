@@ -123,6 +123,8 @@ endif
 #######################################################################################################
 ##客户端接入
 CFLAGS += -D_FUNC_TouchIngress
+# wss TLS 编译开关：注释/删除此行可完全排除 wss，无需链接 OpenSSL
+CFLAGS += -D_FUNC_TouchEdge_EnableTls
 
 # OBJS_GENERALAGENT += \
 #  		$(BASEDIR_SRC)/Function/Stack/UniTransRestStack.o \
@@ -136,6 +138,7 @@ OBJS_GENERALAGENT += \
 		$(BASEDIR_SRC)/Function/Touch/Ingress/DevWsRegisterSvr.o \
 		$(BASEDIR_SRC)/Function/Touch/Ingress/FunRegisterSvr.o \
 		$(BASEDIR_SRC)/Function/Touch/Ingress/AgentTouchIngress.o \
+		$(BASEDIR_SRC)/Function/Touch/Ingress/WsTransport.o \
 		$(BASEDIR_SRC)/Configs/ConfigTouchIngress.o
 
 ##############################################################################
@@ -148,6 +151,16 @@ LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lezUtilCPP-$(PLATFORM)
 
 CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ezsocket
 LIBS += -L$(EZLIBS_BASEDIR_LIBS)/lib -lezsocket-$(PLATFORM)
+
+# OpenSSL 静态库（wss TLS 支持，见 spec-design-tls-websocket.md「编译与链接」）
+# 仅当定义了 -D_FUNC_TouchEdge_EnableTls 才链接；否则完全排除 wss
+ifneq ($(filter -D_FUNC_TouchEdge_EnableTls,$(CFLAGS)),)
+OPENSSL_INSTALL_PREFIX = $(HOME)/libs/openssl-linux
+CFLAGS += -I$(OPENSSL_INSTALL_PREFIX)/include -I$(HOME)/libs/zlib-linux/include
+LIBS += $(OPENSSL_INSTALL_PREFIX)/lib64/libssl.a \
+        $(OPENSSL_INSTALL_PREFIX)/lib64/libcrypto.a \
+        $(HOME)/libs/zlib-linux/lib/libz.a
+endif
 
 CFLAGS += -I$(EZLIBS_BASEDIR_LIBS)/include/ppSockets
 LIBS +=	-L$(EZLIBS_BASEDIR_LIBS)/lib -lppSockets-$(PLATFORM)

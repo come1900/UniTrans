@@ -7,7 +7,7 @@ N=${1:-40}
 
 # 基线
 L0=$(wc -l < "$EL")
-V0=$(cd /home/10312200/svn/daily/src/come1900/UniTrans/man/touch_manager && wpyenv/bin/python -c "import sqlite3;c=sqlite3.connect('t-touch_manager.db');print(c.execute('SELECT version FROM edge_configs WHERE edge_id=?',('$EID',)).fetchone()[0]);c.close()")
+V0=$(cd /home/10312200/svn/come1900/UniTrans/man/touch_manager && wpyenv/bin/python -c "import sqlite3;c=sqlite3.connect('t-touch_manager.db');print(c.execute('SELECT version FROM edge_configs WHERE edge_id=?',('$EID',)).fetchone()[0]);c.close()")
 
 START=$(date +%s%3N)
 for i in $(seq 1 $N); do
@@ -31,7 +31,7 @@ DUP=$(echo "$NEW" | sort -n | uniq -d)
 [ -z "$DUP" ] && echo ">>> 版本唯一性: 通过 (无复用)" || echo ">>> 版本唯一性: ⚠ 有复用: $DUP"
 
 # 最终版本
-V1=$(cd /home/10312200/svn/daily/src/come1900/UniTrans/man/touch_manager && wpyenv/bin/python -c "import sqlite3;c=sqlite3.connect('t-touch_manager.db');print(c.execute('SELECT version FROM edge_configs WHERE edge_id=?',('$EID',)).fetchone()[0]);c.close()")
+V1=$(cd /home/10312200/svn/come1900/UniTrans/man/touch_manager && wpyenv/bin/python -c "import sqlite3;c=sqlite3.connect('t-touch_manager.db');print(c.execute('SELECT version FROM edge_configs WHERE edge_id=?',('$EID',)).fetchone()[0]);c.close()")
 echo "--- version: 起点=$V0  终点(DB)=$V1  期望终点=$((V0+N)) ---"
 [ "$V1" -eq $((V0+N)) ] && echo ">>> DB 版本连续性: 正确 ($V0 -> $V1, +$N)" || echo ">>> DB 版本连续性: 异常"
 
@@ -48,11 +48,11 @@ print('  GET token=', c.get('auth',{}).get('token','NONE'), ' localPort=', c.get
 print('  GET keys=', sorted(c.keys()))
 ")
 echo "$G"
-EFILE=/home/10312200/svn/daily/src/come1900/UniTrans/test/touch/touch_edge/shpc/shpc.edge001.json
+EFILE=/home/10312200/svn/come1900/UniTrans/test/touch/touch_edge/shpc/shpc.edge001.json
 FT=$(grep -oE '"token":"[^"]*"' "$EFILE" | sed 's/"token":"//;s/"//;')
 FL=$(grep -oE '"localPort":[0-9]*' "$EFILE" | sed 's/"localPort"://')
 echo "  edge文件 token=$FT localPort=$FL"
-DBJ=$(cd /home/10312200/svn/daily/src/come1900/UniTrans/man/touch_manager && wpyenv/bin/python -c "
+DBJ=$(cd /home/10312200/svn/come1900/UniTrans/man/touch_manager && wpyenv/bin/python -c "
 import sqlite3,json
 c=sqlite3.connect('t-touch_manager.db')
 r=c.execute('SELECT config_json FROM edge_configs WHERE edge_id=?',('$EID',)).fetchone()[0]

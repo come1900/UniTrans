@@ -14,7 +14,7 @@ echo ""
 
 # 配置参数
 DATABASE_NAME="${DATABASE_NAME:-t-touch_manager.db}"
-PORT="${PORT:-18051}"
+TOUCH_MANAGER_PORT="${TOUCH_MANAGER_PORT:-18051}"
 DEFAULT_INGRESS_ID="${DEFAULT_INGRESS_ID:-local-127.0.0.1}"
 DEFAULT_INGRESS_HOST="${DEFAULT_INGRESS_HOST:-127.0.0.1}"
 
@@ -78,14 +78,14 @@ echo "========================================"
 echo ""
 echo "配置信息:"
 echo "  - 数据库: $DATABASE_NAME"
-echo "  - 端口: $PORT"
+echo "  - 端口: $TOUCH_MANAGER_PORT"
 echo "  - Ingress ID: $DEFAULT_INGRESS_ID"
 echo "  - Ingress Host: $DEFAULT_INGRESS_HOST"
 echo ""
 echo "访问地址:"
-echo "  - Web UI: http://localhost:$PORT"
-echo "  - API: http://localhost:$PORT/api/v1"
-echo "  - Health: http://localhost:$PORT/health"
+echo "  - Web UI: http://localhost:$TOUCH_MANAGER_PORT"
+echo "  - API: http://localhost:$TOUCH_MANAGER_PORT/api/v1"
+echo "  - Health: http://localhost:$TOUCH_MANAGER_PORT/health"
 echo ""
 echo "按 Ctrl+C 停止服务"
 echo "========================================"
@@ -95,5 +95,5 @@ echo ""
 exec DEFAULT_INGRESS_ID="$DEFAULT_INGRESS_ID" \
      DEFAULT_INGRESS_HOST="$DEFAULT_INGRESS_HOST" \
      DATABASE_NAME="$DATABASE_NAME" \
-     PORT="$PORT" \
+     TOUCH_MANAGER_PORT="$TOUCH_MANAGER_PORT" \
      python app.py

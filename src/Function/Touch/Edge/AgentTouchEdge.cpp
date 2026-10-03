@@ -131,6 +131,10 @@ EZTHREAD_BOOL CAgentTouchEdge::Start(CEZObject * pObj, TouchEdgeSignalProc_t pPr
         ez_printf_info("=== Touch Edge Configuration ===\n");
         ez_printf_info(" IngressHost: %s\n", m_Config.IngressHost.c_str());
         ez_printf_info(" IngressPort: %d\n", m_Config.IngressPort);
+        ez_printf_info(" WssEnable: %d\n", m_Config.iWssEnable);
+        ez_printf_info(" WssPort: %d\n", m_Config.iWssPort);
+        ez_printf_info(" TlsVerifyPeer: %d\n", m_Config.iTlsVerifyPeer);
+        ez_printf_info(" TlsCaPath: %s\n", m_Config.strTlsCaPath.c_str());
         ez_printf_info(" EdgeId: %s\n", m_Config.EdgeId.c_str());
         ez_printf_info(" EdgeType: %s\n", m_Config.EdgeType.c_str());
         ez_printf_info(" Timeout: %d sec\n", m_Config.iConnTimeOut);
@@ -139,8 +143,13 @@ EZTHREAD_BOOL CAgentTouchEdge::Start(CEZObject * pObj, TouchEdgeSignalProc_t pPr
         // 更新 FunRegisterCli 的设备参数（使用配置加载后的值）
         m_pFunRegisterCli->UpdateEdgeParams(m_Config.EdgeId, m_Config.EdgeKey, m_Config.EdgeType);
 
-        // 启动 FunRegisterCli
-        m_pFunRegisterCli->Start(m_Config.IngressHost.c_str(), m_Config.IngressPort);
+        // 启动 FunRegisterCli（wss 翻切：iWssEnable=1 时连 ingress 的 wss 端口并启用 TLS）
+        m_pFunRegisterCli->Start(m_Config.IngressHost.c_str(),
+                                 m_Config.iWssEnable ? m_Config.iWssPort : m_Config.IngressPort,
+                                 -1,
+                                 m_Config.iWssEnable,
+                                 m_Config.iTlsVerifyPeer,
+                                 m_Config.strTlsCaPath.c_str());
 
         int ret = CreateThread();
         ARG_USED(ret);
@@ -216,6 +225,10 @@ void CAgentTouchEdge::SetConfig()
 
     m_Config.IngressHost = __cfg.getConfig().strIngressHost;
     m_Config.IngressPort = __cfg.getConfig().iIngressPort > 0 ? __cfg.getConfig().iIngressPort : 54321;
+    m_Config.iWssEnable = __cfg.getConfig().iWssEnable > 0 ? 1 : 0;
+    m_Config.iWssPort = __cfg.getConfig().iWssPort > 0 ? __cfg.getConfig().iWssPort : 54443;
+    m_Config.iTlsVerifyPeer = __cfg.getConfig().iTlsVerifyPeer > 0 ? 1 : 0;
+    m_Config.strTlsCaPath = __cfg.getConfig().strTlsCaPath;
     m_Config.EdgeId = __cfg.getConfig().strEdgeId;
     m_Config.EdgeKey = __cfg.getConfig().strEdgeKey;
     m_Config.EdgeType = __cfg.getConfig().strEdgeType;
@@ -228,6 +241,10 @@ void CAgentTouchEdge::SetConfig()
     m_Config.EdgeKey = "key001";
     m_Config.EdgeType = "touch";
     m_Config.iConnTimeOut = 5;
+    m_Config.iWssEnable = 1;
+    m_Config.iWssPort = 54443;
+    m_Config.iTlsVerifyPeer = 1;
+    m_Config.strTlsCaPath = "";
 #endif
 }
 

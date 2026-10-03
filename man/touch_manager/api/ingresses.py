@@ -6,6 +6,7 @@ Ingress management API endpoints (v0.1 MVP - only configuration management).
 
 import logging
 from datetime import datetime
+from urllib.parse import urlsplit
 from flask import request, jsonify
 
 from api import api_bp
@@ -34,10 +35,12 @@ def list_ingresses():
             ingress_list = []
 
             # 1. Add default ingress from config.py
+            _default_parts = urlsplit(Config.DEFAULT_INGRESS_URL)
             default_ingress = {
                 'ingress_id': Config.DEFAULT_INGRESS_ID,
-                'host': Config.DEFAULT_INGRESS_HOST,
-                'port': Config.DEFAULT_INGRESS_PORT,
+                'url': Config.DEFAULT_INGRESS_URL,
+                'host': _default_parts.hostname,
+                'port': _default_parts.port or (443 if _default_parts.scheme.lower() == 'wss' else 80),
                 'enabled': True,
                 'status': INGRESS_STATUS_ONLINE if ingress_manager.is_connected(Config.DEFAULT_INGRESS_ID) else INGRESS_STATUS_OFFLINE,
                 'created_at': None,

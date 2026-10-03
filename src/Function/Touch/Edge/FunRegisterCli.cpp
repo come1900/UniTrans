@@ -72,14 +72,16 @@ void CFunRegisterCli::UpdateEdgeParams(const std::string& edge_id, const std::st
     m_token = "";
 }
 
-void CFunRegisterCli::Start(const char *server_addr, unsigned short port, int reconnect_max_retries)
+void CFunRegisterCli::Start(const char *server_addr, unsigned short port, int reconnect_max_retries,
+                            int tls_enable, int tls_verify_peer, const char *tls_ca_path)
 {
     if (m_started) {
         return;
     }
 
-    // 启动 WebSocket 客户端
-    if (!g_DevWsRegisterCli.Start(server_addr, port, "/come", "come.1", reconnect_max_retries)) {
+    // 启动 WebSocket 客户端（tls_enable=1 用 wss，0 用明文 ws）
+    if (!g_DevWsRegisterCli.Start(server_addr, port, "/come", "come.1", reconnect_max_retries,
+                                  tls_enable, tls_verify_peer, tls_ca_path)) {
         return;
     }
 

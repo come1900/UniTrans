@@ -2,7 +2,8 @@
 # 快速版本遍历测试 - 只测试 Ingress 是否能稳定运行
 set -e
 
-BASEDIR="/home/wujj/svn/daily/src/appmodule/UniTrans"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASEDIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 START_REV=${1:-4316}
 END_REV=${2:-4319}
 

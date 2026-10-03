@@ -45,17 +45,25 @@ CFunRegisterSvr::~CFunRegisterSvr()
     Stop();
 }
 
-void CFunRegisterSvr::Start(unsigned short port, const char *protocol, const char *path_prefix)
+void CFunRegisterSvr::Start(unsigned short port, const char *protocol, const char *path_prefix,
+                            bool wss_enable, unsigned short wss_port,
+                            const std::string &tls_cert_path,
+                            const std::string &tls_key_path,
+                            const std::string &tls_ca_path)
 {
     if (m_started) {
         ez_printf_warning("Already started, ignoring Start() call\n");
         return;
     }
 
-    ez_printf_info("Starting on port %d, protocol=%s, path_prefix=%s\n",
-           port, protocol ? protocol : "come.1", path_prefix ? path_prefix : "/come");
+    ez_printf_info("Starting on port %d, protocol=%s, path_prefix=%s, wss_enable=%d, wss_port=%d\n",
+           port, protocol ? protocol : "come.1", path_prefix ? path_prefix : "/come",
+           wss_enable ? 1 : 0, wss_port);
 
-    // 启动 WebSocket 服务端
+    // 配置 TLS wss 实例（在 Start 之前注入；enable=0 则只起明文）
+    g_DevWsRegisterSvr.SetWssConfig(wss_enable, wss_port, tls_cert_path, tls_key_path, tls_ca_path);
+
+    // 启动 WebSocket 服务端（明文 + 可选 wss）
     if (!g_DevWsRegisterSvr.Start(port, protocol ? protocol : "come.1", path_prefix ? path_prefix : "/come")) {
         ez_printf_error("Failed to start WebSocket server on port %d\n", port);
         return;
@@ -88,6 +96,7 @@ void CFunRegisterSvr::Stop()
 
     // 清理所有设备信息
     m_online_edges.clear();
+    m_edge_id_to_client.clear();
     m_offline_edges_cache.clear();
     m_manager_client_id = EZ_WS_SERVER_INVALID_CLIENT_ID;
 
@@ -180,6 +189,10 @@ void CFunRegisterSvr::OnWebsocketNotify(CDevWsRegisterSvr::SignalType sig_type, 
                 }
 
                 // 清理在线设备信息
+                if (!edge.edge_id.empty()) {
+                    // 同步删除 edge_id 反查索引（仅已注册 edge 有索引条目）
+                    m_edge_id_to_client.erase(edge.edge_id);
+                }
                 m_online_edges.erase(it);
             } else {
                 // 未知连接断开（可能是被踢掉的旧 Manager 或其他连接）
@@ -350,19 +363,18 @@ void CFunRegisterSvr::handle_device_online_jsonrpc2(int client_id, const EdgeOnl
         return;
     }
 
-    // 检查是否已有相同 edge_id 的设备连接
-    for (auto it = m_online_edges.begin(); it != m_online_edges.end(); ++it) {
-        if (it->second.edge_id == edge_id) {
-            // 业务错误码使用正整数
-            ez_printf_warning("[EDGE.ONLINE] Device already connected [edge_id=%s, old_client_id=%d, new_client_id=%d]\n",
-                   edge_id.c_str(), it->first, client_id);
-            std::string err_json = ComeJsonCodec::buildJsonRpcError(40003, "Device already connected", JsonValue::createInt64(id));
-            if (!err_json.empty()) {
-                g_DevWsRegisterSvr.SendText(client_id, err_json.c_str(), err_json.length());
-            }
-            g_DevWsRegisterSvr.CloseClient(client_id);
-            return;
+    // 检查是否已有相同 edge_id 的设备连接（走 edge_id 反查索引，O(1)）
+    int exist_client = FindClientByEdgeId(edge_id);
+    if (exist_client != EZ_WS_SERVER_INVALID_CLIENT_ID) {
+        // 业务错误码使用正整数
+        ez_printf_warning("[EDGE.ONLINE] Device already connected [edge_id=%s, old_client_id=%d, new_client_id=%d]\n",
+               edge_id.c_str(), exist_client, client_id);
+        std::string err_json = ComeJsonCodec::buildJsonRpcError(40003, "Device already connected", JsonValue::createInt64(id));
+        if (!err_json.empty()) {
+            g_DevWsRegisterSvr.SendText(client_id, err_json.c_str(), err_json.length());
         }
+        g_DevWsRegisterSvr.CloseClient(client_id);
+        return;
     }
 
     // 验证设备
@@ -429,6 +441,9 @@ void CFunRegisterSvr::handle_device_online_jsonrpc2(int client_id, const EdgeOnl
         device_info.touch_token = touch_token;
         m_online_edges[client_id] = device_info;
     }
+
+    // 建立 edge_id 反查索引（edge.online 成功，edge_id 确定）
+    m_edge_id_to_client[edge_id] = client_id;
 
     // Edge 重新上线时，清除其离线缓存
     ClearEdgeOfflineCache(edge_id);
@@ -730,20 +745,10 @@ void CFunRegisterSvr::handle_config_update_jsonrpc2(int client_id, const std::st
         return;
     }
 
-    // 2. 查找 edge_id 对应的 client_id
-    int edge_client_id = EZ_WS_SERVER_INVALID_CLIENT_ID;
-    ez_printf_info("[CONFIG.UPDATE] Searching for edge %s in m_online_edges (size=%zu)\n",
-           edge_id.c_str(), m_online_edges.size());
-
-    for (auto it = m_online_edges.begin(); it != m_online_edges.end(); ++it) {
-        ez_printf_info("[CONFIG.UPDATE] Checking m_online_edges entry: client_id=%d, edge_id=%s\n",
-               it->first, it->second.edge_id.c_str());
-        if (it->second.edge_id == edge_id) {
-            edge_client_id = it->first;
-            ez_printf_info("[CONFIG.UPDATE] Found edge %s at client_id=%d\n", edge_id.c_str(), edge_client_id);
-            break;
-        }
-    }
+    // 2. 查找 edge_id 对应的 client_id（走 edge_id 反查索引，O(1)）
+    int edge_client_id = FindClientByEdgeId(edge_id);
+    ez_printf_info("[CONFIG.UPDATE] Resolved edge %s -> client_id=%d\n",
+           edge_id.c_str(), edge_client_id);
 
     if (edge_client_id == EZ_WS_SERVER_INVALID_CLIENT_ID) {
         ez_printf_warning("[CONFIG.UPDATE] Edge %s not found for config update (manager client_id=%d, online_edges=%zu)\n",
@@ -860,14 +865,8 @@ void CFunRegisterSvr::handle_config_query_jsonrpc2(int client_id, const std::str
 
     ez_printf_info("[CONFIG.QUERY] Decoded edge_id=%s from query request\n", edge_id.c_str());
 
-    // 2. 查找 edge_id 对应的 client_id
-    int edge_client_id = EZ_WS_SERVER_INVALID_CLIENT_ID;
-    for (auto it = m_online_edges.begin(); it != m_online_edges.end(); ++it) {
-        if (it->second.edge_id == edge_id) {
-            edge_client_id = it->first;
-            break;
-        }
-    }
+    // 2. 查找 edge_id 对应的 client_id（走 edge_id 反查索引，O(1)）
+    int edge_client_id = FindClientByEdgeId(edge_id);
 
     if (edge_client_id == EZ_WS_SERVER_INVALID_CLIENT_ID) {
         ez_printf_warning("[CONFIG.QUERY] Edge %s not found for query (manager client_id=%d, online_edges=%zu)\n",
@@ -906,6 +905,14 @@ void CFunRegisterSvr::handle_config_query_jsonrpc2(int client_id, const std::str
 // Edge 上报模式和离线缓存特性实现
 // ==============================
 
+int CFunRegisterSvr::FindClientByEdgeId(const std::string& edge_id) const
+{
+    auto it = m_edge_id_to_client.find(edge_id);
+    if (it == m_edge_id_to_client.end())
+        return EZ_WS_SERVER_INVALID_CLIENT_ID;
+    return it->second;
+}
+
 void CFunRegisterSvr::CacheEdgeOfflineEvent(const std::string& edge_id, const EdgeDeviceInfo& edge_info)
 {
     // 缓存 Edge 离线事件
@@ -943,12 +950,13 @@ void CFunRegisterSvr::ReportCachedOfflineEvents()
 
 void CFunRegisterSvr::HandleManagerOnlineConfirmResponse(const std::string& edge_id)
 {
-    // 查找对应的在线设备并更新确认状态
-    for (auto it = m_online_edges.begin(); it != m_online_edges.end(); ++it) {
-        if (it->second.edge_id == edge_id) {
+    // 查找对应的在线设备并更新确认状态（走 edge_id 反查索引，O(1)）
+    int client_id = FindClientByEdgeId(edge_id);
+    if (client_id != EZ_WS_SERVER_INVALID_CLIENT_ID) {
+        auto it = m_online_edges.find(client_id);
+        if (it != m_online_edges.end()) {
             it->second.pending_manager_confirm = false;
-            ez_printf_debug("Manager confirmed online for edge %s (client_id=%d)\n", edge_id.c_str(), it->first);
-            return;
+            ez_printf_debug("Manager confirmed online for edge %s (client_id=%d)\n", edge_id.c_str(), client_id);
         }
     }
 }
@@ -1031,14 +1039,15 @@ void CFunRegisterSvr::notify_device_online(const std::string& edge_id)
         return;
     }
 
-    // 获取 Edge 的设备信息和公网 IP
+    // 获取 Edge 的设备信息和公网 IP（走 edge_id 反查索引，O(1)）
     std::string edge_public_ip;
     std::string edge_type;
-    for (auto it = m_online_edges.begin(); it != m_online_edges.end(); ++it) {
-        if (it->second.edge_id == edge_id) {
+    int client_id = FindClientByEdgeId(edge_id);
+    if (client_id != EZ_WS_SERVER_INVALID_CLIENT_ID) {
+        auto it = m_online_edges.find(client_id);
+        if (it != m_online_edges.end()) {
             edge_public_ip = it->second.public_ip;
             edge_type = it->second.edge_type;
-            break;
         }
     }
 
@@ -1129,30 +1138,27 @@ std::string CFunRegisterSvr::gen_touch_token(TouchTokenType type, const std::str
 
 void CFunRegisterSvr::kick_device(const std::string& edge_id)
 {
-    // 查找并断开指定设备的连接
-    for (auto it = m_online_edges.begin(); it != m_online_edges.end(); ++it) {
-        if (it->second.edge_id == edge_id) {
-            int client_id = it->first;
-
-            // 发送拒绝消息给设备（如果连接仍然有效）
-            AckEdgeOnline ack(40001, false, "Edge rejected by admin");
-            std::string ack_json = ComeJsonCodec::encode(ack);
-            if (!ack_json.empty()) {
-                g_DevWsRegisterSvr.SendText(client_id, ack_json.c_str(), ack_json.length());
-            }
-
-            // 关闭连接
-            // 注意：CloseClient 会触发 SIGNAL_DISCONNECTED 回调
-            // SIGNAL_DISCONNECTED 处理中会：
-            //   1. 调用 notify_device_offline（通知 Manager）
-            //   2. 从 m_online_edges 中删除该条目
-            // 所以这里不需要主动删除，避免 double erase 导致崩溃
-            g_DevWsRegisterSvr.CloseClient(client_id);
-            ez_printf_info("[KICK] Kicked edge %s (client_id=%d)\n", edge_id.c_str(), client_id);
-
-            // 不再主动 erase，让 SIGNAL_DISCONNECTED 回调处理
-            return;
+    // 查找并断开指定设备的连接（走 edge_id 反查索引，O(1)）
+    int client_id = FindClientByEdgeId(edge_id);
+    if (client_id != EZ_WS_SERVER_INVALID_CLIENT_ID) {
+        // 发送拒绝消息给设备（如果连接仍然有效）
+        AckEdgeOnline ack(40001, false, "Edge rejected by admin");
+        std::string ack_json = ComeJsonCodec::encode(ack);
+        if (!ack_json.empty()) {
+            g_DevWsRegisterSvr.SendText(client_id, ack_json.c_str(), ack_json.length());
         }
+
+        // 关闭连接
+        // 注意：CloseClient 会触发 SIGNAL_DISCONNECTED 回调
+        // SIGNAL_DISCONNECTED 处理中会：
+        //   1. 调用 notify_device_offline（通知 Manager）
+        //   2. 从 m_online_edges 中删除该条目并同步删除反查索引
+        // 所以这里不需要主动删除，避免 double erase 导致崩溃
+        g_DevWsRegisterSvr.CloseClient(client_id);
+        ez_printf_info("[KICK] Kicked edge %s (client_id=%d)\n", edge_id.c_str(), client_id);
+
+        // 不再主动 erase，让 SIGNAL_DISCONNECTED 回调处理
+        return;
     }
 
     // Edge 不在在线列表中，可能已经自然断开

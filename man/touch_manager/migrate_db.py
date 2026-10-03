@@ -7,7 +7,7 @@ Database migration script to add 'confirmed' column to edges table.
 import sqlite3
 import os
 
-DATABASE_PATH = os.path.expanduser('~/svn/daily/src/appmodule/touch/touch_manager/touch_manager.db')
+DATABASE_PATH = os.path.expanduser('~/svn/come1900/UniTrans/man/touch_manager/touch_manager.db')
 
 def migrate():
     """Add 'confirmed' column to edges table.

@@ -20,7 +20,7 @@
 
 ### 环境要求
 
-- touch_manager 运行在 `http://localhost:18051`（默认端口 18050，测试用 `PORT=18051` 覆盖）
+- touch_manager 运行在 `http://localhost:18051`（默认端口 18050，测试用 `TOUCH_MANAGER_PORT=18051` 覆盖）
 - touch_ingress 运行在 `127.0.0.1:54321`
 - 测试边缘 ID：`edge001` ~ `edge010`（统一三位 edge id）；亦可用 `edge-test-001` ~ `edge-test-010`
 - Edge 侧配置文件名：`./shpc/shpc.<edge_id>.json`（相对 edge 工作目录，由 `FunRegisterCli::get_frpc_config_path()` 生成）
@@ -34,7 +34,7 @@ cd <repo>/test/touch/touch_ingress
 
 # 2. 启动 touch_manager
 cd <repo>/man/touch_manager
-DEFAULT_INGRESS_ID='local-127.0.0.1' DEFAULT_INGRESS_HOST='127.0.0.1' PORT='18051' wpyenv/bin/python app.py &
+DEFAULT_INGRESS_ID='local-127.0.0.1' DEFAULT_INGRESS_HOST='127.0.0.1' TOUCH_MANAGER_PORT='18051' wpyenv/bin/python app.py &
 
 # 3. 启动 edge（连本地 ingress，edge001）
 cd <repo>/test/touch/touch_edge
@@ -967,7 +967,7 @@ sleep 3
 # 3. 启动 Manager
 cd <repo>/man/touch_manager
 source wpyenv/bin/activate
-DATABASE_NAME='t-touch_manager.db' PORT='18051' python app.py &
+DATABASE_NAME='t-touch_manager.db' TOUCH_MANAGER_PORT='18051' python app.py &
 sleep 5
 
 # 4. 查询在线 Edge
@@ -1072,7 +1072,7 @@ cd <repo>/test/touch/touch_ingress
 
 # 2. 启动 touch_manager
 cd <repo>/man/touch_manager
-DEFAULT_INGRESS_ID='local-127.0.0.1' DEFAULT_INGRESS_HOST='127.0.0.1' PORT='18051' wpyenv/bin/python app.py &
+DEFAULT_INGRESS_ID='local-127.0.0.1' DEFAULT_INGRESS_HOST='127.0.0.1' TOUCH_MANAGER_PORT='18051' wpyenv/bin/python app.py &
 
 # 3. 启动 edge（连本地 ingress，edge001）
 cd <repo>/test/touch/touch_edge
@@ -1706,7 +1706,7 @@ sleep 2
 # 3. 启动 Manager
 cd man/touch_manager && source wpyenv/bin/activate
 DEFAULT_INGRESS_ID='local-127.0.0.1' DEFAULT_INGRESS_HOST='127.0.0.1' \
-  DATABASE_NAME='t-touch_manager.db' PORT='18051' python app.py &
+  DATABASE_NAME='t-touch_manager.db' TOUCH_MANAGER_PORT='18051' python app.py &
 sleep 6
 
 # 4. 验证 Ingress 和 Manager 正常运行

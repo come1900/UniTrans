@@ -93,11 +93,16 @@ EZTHREAD_BOOL CAgentTouchIngress::Start(CEZObject * pObj, TouchIngressSignalProc
         ez_printf_info(" Port: %d\n", m_Config.Port);
         ez_printf_info(" Protocol: %s\n", m_Config.strProtocol.c_str());
         ez_printf_info(" PathPrefix: %s\n", m_Config.strPathPrefix.c_str());
+        ez_printf_info(" WssEnable: %d\n", m_Config.iWssEnable);
+        ez_printf_info(" WssPort: %d\n", m_Config.iWssPort);
+        ez_printf_info(" TlsCertPath: %s\n", m_Config.strTlsCertPath.c_str());
         ez_printf_info(" Timeout: %d sec\n", m_Config.iConnTimeOut);
         ez_printf_info("===================================\n");
 
         // 启动 FunRegisterSvr (使用配置中的 WebSocket 参数)
-        m_pFunRegisterSvr->Start(m_Config.Port, m_Config.strProtocol.c_str(), m_Config.strPathPrefix.c_str());
+        m_pFunRegisterSvr->Start(m_Config.Port, m_Config.strProtocol.c_str(), m_Config.strPathPrefix.c_str(),
+                                 m_Config.iWssEnable ? true : false, m_Config.iWssPort,
+                                 m_Config.strTlsCertPath, m_Config.strTlsKeyPath, m_Config.strTlsCaPath);
 
         int ret = CreateThread();
         ARG_USED(ret);
@@ -175,6 +180,11 @@ void CAgentTouchIngress::SetConfig()
     m_Config.Port = __cfg.getConfig().iPort > 0 ? __cfg.getConfig().iPort : 54321;
     m_Config.strProtocol = __cfg.getConfig().strProtocol;
     m_Config.strPathPrefix = __cfg.getConfig().strPathPrefix;
+    m_Config.iWssEnable = __cfg.getConfig().iWssEnable > 0 ? 1 : 0;
+    m_Config.iWssPort = __cfg.getConfig().iWssPort > 0 ? __cfg.getConfig().iWssPort : 54443;
+    m_Config.strTlsCertPath = __cfg.getConfig().strTlsCertPath;
+    m_Config.strTlsKeyPath = __cfg.getConfig().strTlsKeyPath;
+    m_Config.strTlsCaPath = __cfg.getConfig().strTlsCaPath;
     m_Config.iConnTimeOut = __cfg.getConfig().PeerTimeout > 0 ? __cfg.getConfig().PeerTimeout : 5;
     m_Config.EdgeReportMode = __cfg.getConfig().EdgeReportMode;
 #else
@@ -183,6 +193,11 @@ void CAgentTouchIngress::SetConfig()
     m_Config.Port = 54321;
     m_Config.strProtocol = "come.1";
     m_Config.strPathPrefix = "/come";
+    m_Config.iWssEnable = 0;
+    m_Config.iWssPort = 54443;
+    m_Config.strTlsCertPath = "";
+    m_Config.strTlsKeyPath = "";
+    m_Config.strTlsCaPath = "";
     m_Config.iConnTimeOut = 5;
     m_Config.EdgeReportMode = 1;  // 默认：上报所有已连接的 Edge
 #endif

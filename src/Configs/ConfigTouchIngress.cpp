@@ -24,7 +24,14 @@ template<> void exchangeTable<ConfigTouchIngress>(CConfigExchange& xchg, CConfig
     // WebSocket 配置
     xchg.exchange(table, "Protocol"    , config.strProtocol    , "come.1");
     xchg.exchange(table, "PathPrefix"    , config.strPathPrefix    , "/come");
-    
+
+    // WSS/TLS 配置
+    xchg.exchange(table, "WssEnable"    , config.iWssEnable    , 0, 1, 0);
+    xchg.exchange(table, "WssPort"    , config.iWssPort    , 1, 65535, 54443);
+    xchg.exchange(table, "TlsCertPath"    , config.strTlsCertPath    , "");
+    xchg.exchange(table, "TlsKeyPath"    , config.strTlsKeyPath    , "");
+    xchg.exchange(table, "TlsCaPath"    , config.strTlsCaPath    , "");
+
     xchg.exchange(table, "CheckPeriod", config.CheckPeriod,  0, 86400, 30);
     xchg.exchange(table, "PeerTimeout", config.PeerTimeout,  5, 3600, 60);
     xchg.exchange(table, "MaxConnections", config.iMaxConnections,  0, 10000, 1000);

@@ -16,6 +16,7 @@ set -e
 INGRESS_PORT=54321
 MANAGER_URL="http://localhost:18051"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASEDIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 EDGE_BINARY="$SCRIPT_DIR/../touch_edge/touch_edge-linux"
 
 # 颜色定义
@@ -57,10 +58,10 @@ start_ingress() {
     print_header "启动 Ingress（EdgeReportMode=2）"
     
     # 修改配置文件
-    local cfg_file="/home/wujj/svn/daily/src/appmodule/UniTrans/build/local/cfg-touchIngress.cfg"
+    local cfg_file="$BASEDIR/build/local/cfg-touchIngress.cfg"
     sed -i 's/"EdgeReportMode" : [0-9]/"EdgeReportMode" : 2/' "$cfg_file"
     
-    cd /home/wujj/svn/daily/src/appmodule/UniTrans/build/local
+    cd "$BASEDIR/build/local"
     cp ../../touchIngress-linux .
     ./touchIngress-linux &
     sleep 2
@@ -88,9 +89,9 @@ start_edge() {
 start_manager() {
     print_header "启动 Manager"
     
-    cd $HOME/svn/daily/src/appmodule/UniTrans/man/touch_manager
+    cd "$BASEDIR/man/touch_manager"
     source wpyenv/bin/activate
-    DATABASE_NAME='t-touch_manager.db' PORT='18051' python app.py &
+    DATABASE_NAME='t-touch_manager.db' TOUCH_MANAGER_PORT='18051' python app.py &
     sleep 5
     
     # 验证 Manager

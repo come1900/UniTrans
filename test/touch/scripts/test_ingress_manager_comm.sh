@@ -5,7 +5,8 @@
 set -e
 
 REVISION=$1
-BASEDIR="/home/wujj/svn/daily/src/appmodule/UniTrans"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASEDIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 
 echo "========================================="
 echo "测试 SVN 版本: r${REVISION}"
@@ -26,7 +27,7 @@ svn up -r ${REVISION} --quiet
 # 3. 清理日志和数据库
 echo "[3/8] 清理日志和数据库..."
 rm -f /tmp/logs/log-touchIngress.log
-rm -f /home/wujj/logs/log-touchIngress.log
+rm -f $HOME/logs/log-touchIngress.log
 rm -f $BASEDIR/man/touch_manager/t-touch_manager.db
 rm -f /tmp/ingress_test_output.log
 

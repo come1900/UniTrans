@@ -4,7 +4,8 @@
 
 set -e
 
-BASEDIR="/home/wujj/svn/daily/src/appmodule/UniTrans"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASEDIR="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
 MANAGER_URL="http://localhost:18051"
 PASS=0
 FAIL=0

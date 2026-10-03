@@ -22,6 +22,7 @@
 
 #include <string>
 #include <map>
+#include <unordered_map>
 #include <ctime>
 #include "EZObject.h"
 #include "DevWsRegisterSvr.h"
@@ -71,7 +72,14 @@ public:
     virtual ~CFunRegisterSvr();
 
     // 启动/停止
-    void Start(unsigned short port, const char *protocol = "come.1", const char *path_prefix = "/come");
+    // wss_enable: 是否同时启动 TLS wss 实例（默认关闭）
+    // wss_port: wss 监听端口
+    // tls_cert_path/tls_key_path/tls_ca_path: TLS 证书（空 → 内置 CA 互认）
+    void Start(unsigned short port, const char *protocol = "come.1", const char *path_prefix = "/come",
+               bool wss_enable = false, unsigned short wss_port = 0,
+               const std::string &tls_cert_path = "",
+               const std::string &tls_key_path = "",
+               const std::string &tls_ca_path = "");
     void Stop();
 
     // 注册回调：设备注册成功/失败（保留兼容性）
@@ -101,7 +109,14 @@ private:
 
     // 在线 Edge 设备信息（client_id -> EdgeDeviceInfo）
     // 保存当前有 WebSocket 连接的所有 Edge 设备
-    std::map<int, EdgeDeviceInfo> m_online_edges;
+    // 主表：热路径（收消息）按 client_id 直查 O(1)
+    std::unordered_map<int, EdgeDeviceInfo> m_online_edges;
+
+    // edge_id 反查索引（edge_id -> client_id）
+    // 辅助索引：业务侧常只拿到 edge_id（config/notify/kick/manager 确认），
+    // 用该索引 O(1) 反查 client_id，避免对主表线性扫描 O(n)。
+    // 同步规则：edge 上线（edge.online 成功，edge_id 确定）时插入，断连时删除。
+    std::unordered_map<std::string, int> m_edge_id_to_client;
 
     // 离线 Edge 设备信息缓存（edge_id -> EdgeDeviceInfo）
     // 用于记录没有 Manager 连接时下线的设备
@@ -122,6 +137,10 @@ private:
 
     // 缓存 Edge 离线事件
     void CacheEdgeOfflineEvent(const std::string& edge_id, const EdgeDeviceInfo& edge_info);
+
+    // 按 edge_id 反查在线 client_id（走 m_edge_id_to_client 索引，O(1) 平均）
+    // 未找到返回 EZ_WS_SERVER_INVALID_CLIENT_ID
+    int FindClientByEdgeId(const std::string& edge_id) const;
 
     // 清除 Edge 离线缓存（Edge 重新上线时）
     void ClearEdgeOfflineCache(const std::string& edge_id);

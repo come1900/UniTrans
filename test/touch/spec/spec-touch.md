@@ -8,6 +8,7 @@
 |------|------|------|
 | `spec-touch.md` | 整体结构说明（本文档） | 通用 |
 | `spec-design.md` | 三层架构设计文档（含 frpc 远程配置子章节、安全设计章节） | 设计 |
+| `spec-design-tls-websocket.md` | WebSocket 链路 TLS 改造设计文档（libezsocket 宏开关 + OpenSSL） | 设计 |
 | `spec-api.md` | 系统对外接口文档（REST API：Manager ↔ Web UI、Edge 首次注册） | 对外 |
 | `spec-api-websocket-jsonrpc.md` | 系统内部接口文档（Edge ↔ Ingress ↔ Manager，come.1 JSON-RPC 2.0 协议） | 对内 |
 | `spec-config.md` | 各组件配置情况说明 | 对外 |
@@ -21,6 +22,7 @@ touch/
 ├── spec/
 │   ├── spec-touch.md                  # 整体结构说明（本文档）
 │   ├── spec-design.md                 # 三层架构设计文档（含 frpc 远程配置、安全设计章节）
+│   ├── spec-design-tls-websocket.md   # WebSocket 链路 TLS 改造设计文档
 │   ├── spec-api.md                    # 系统对外接口文档（REST API）
 │   ├── spec-api-websocket-jsonrpc.md  # 系统内部接口文档（WebSocket JSON-RPC 2.0）
 │   ├── spec-config.md                 # 各组件配置情况说明（对外）

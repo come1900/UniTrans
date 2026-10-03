@@ -201,7 +201,7 @@
 | `LOG_FILE` | `touch_manager.log` | 日志文件名 |
 
 **测试用数据库**: `t-touch_manager.db`
-- 启动方式：`DATABASE_NAME='t-touch_manager.db' PORT='18051' python app.py`
+- 启动方式：`DATABASE_NAME='t-touch_manager.db' TOUCH_MANAGER_PORT='18051' python app.py`
 
 ---
 

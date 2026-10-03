@@ -19,17 +19,22 @@ class Config:
     _db_name = os.getenv('DATABASE_NAME', 'touch_manager.db')
     DATABASE_PATH = os.getenv('DATABASE_PATH', str(BASE_DIR / _db_name))
 
-    # Server port
-    PORT = int(os.getenv('PORT', 18050))
+    # Server port（兼容旧 PORT 环境变量）
+    TOUCH_MANAGER_PORT = int(os.getenv('TOUCH_MANAGER_PORT', os.getenv('PORT', 18050)))
 
     # Ingress connection
     INGRESS_CONNECT_TIMEOUT = int(os.getenv('INGRESS_CONNECT_TIMEOUT', 5))  # seconds
     INGRESS_RECONNECT_INTERVAL = int(os.getenv('INGRESS_RECONNECT_INTERVAL', 10))  # seconds
 
-    # Default ingress server configuration
+    # Default ingress server configuration（单 URL；scheme 决定是否 TLS：ws:// 明文、wss:// TLS）
+    # 兼容旧拆分：未设 DEFAULT_INGRESS_URL 时按 DEFAULT_INGRESS_HOST/PORT 拼装
     DEFAULT_INGRESS_ID = os.getenv('DEFAULT_INGRESS_ID', 'local-127.0.0.1')
-    DEFAULT_INGRESS_HOST = os.getenv('DEFAULT_INGRESS_HOST', '127.0.0.1')
-    DEFAULT_INGRESS_PORT = int(os.getenv('DEFAULT_INGRESS_PORT', 54321))
+    DEFAULT_INGRESS_URL = os.getenv(
+        'DEFAULT_INGRESS_URL',
+        f"wss://{os.getenv('DEFAULT_INGRESS_HOST', '127.0.0.1')}:{os.getenv('DEFAULT_INGRESS_PORT', '54443')}",
+    )
+    INGRESS_CA_FILE = os.getenv('INGRESS_CA_FILE', '')  # wss 校验用 CA 文件（内置 CA 导出）；空则用系统 CA
+    INGRESS_SSL_VERIFY = os.getenv('INGRESS_SSL_VERIFY', '1') != '0'  # wss 时是否校验证书（0=跳过）
 
     # WebSocket ping/pong configuration
     # ping_timeout should be 1/3 to 1/2 of ping_interval for reliable detection

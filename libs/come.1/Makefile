@@ -18,7 +18,7 @@
 # cross 2026
 #PLATFORM = linux-x86-64
 
-PUB_MAKE_FILE_PREFIX =	../../../../library/Makefile.Defines
+PUB_MAKE_FILE_PREFIX =	../../../lazaru/Makefile.Defines
 include		$(PUB_MAKE_FILE_PREFIX)/Makefile.Batch.Build
 
 # define default platform

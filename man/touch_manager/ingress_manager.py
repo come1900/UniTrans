@@ -9,7 +9,7 @@ Manages WebSocket connections to all configured touch_ingress instances.
 import logging
 from typing import Dict, Optional
 from database import get_db, Ingress
-from ingress_client import IngressClient
+from ingress_client import IngressClient, ws_base
 from config import Config
 from protocol import MANAGER_EDGE_KICK
 
@@ -76,24 +76,20 @@ class IngressManager:
     def _connect_default_ingress_from_config(self):
         """Connect to the default ingress defined in config.py."""
         try:
-            client = IngressClient(
-                Config.DEFAULT_INGRESS_ID,
-                Config.DEFAULT_INGRESS_HOST,
-                Config.DEFAULT_INGRESS_PORT
-            )
+            client = IngressClient(Config.DEFAULT_INGRESS_ID, Config.DEFAULT_INGRESS_URL)
             client.start()
             self.clients[Config.DEFAULT_INGRESS_ID] = client
-            logger.info(f"Started connection to default ingress {Config.DEFAULT_INGRESS_ID} at {Config.DEFAULT_INGRESS_HOST}:{Config.DEFAULT_INGRESS_PORT}")
+            logger.info(f"Started connection to default ingress {Config.DEFAULT_INGRESS_ID} at {client.ws_url}")
         except Exception as e:
             logger.error(f"Failed to start connection to default ingress {Config.DEFAULT_INGRESS_ID}: {e}")
 
     def _connect_ingress(self, ingress: Ingress):
         """Connect to a specific ingress."""
         try:
-            client = IngressClient(ingress.ingress_id, ingress.host, ingress.port)
+            client = IngressClient(ingress.ingress_id, f"ws://{ingress.host}:{ingress.port}")
             client.start()
             self.clients[ingress.ingress_id] = client
-            logger.info(f"Started connection to ingress {ingress.ingress_id} at {ingress.host}:{ingress.port}")
+            logger.info(f"Started connection to ingress {ingress.ingress_id} at {client.ws_url}")
         except Exception as e:
             logger.error(f"Failed to start connection to ingress {ingress.ingress_id}: {e}")
     
@@ -227,7 +223,7 @@ class IngressManager:
         if Config.DEFAULT_INGRESS_ID in self.clients:
             # Check if config changed
             client = self.clients[Config.DEFAULT_INGRESS_ID]
-            if client.host != Config.DEFAULT_INGRESS_HOST or client.port != Config.DEFAULT_INGRESS_PORT:
+            if client.base_url != ws_base(Config.DEFAULT_INGRESS_URL):
                 logger.info(f"Default ingress config changed, reconnecting...")
                 client.stop()
                 del self.clients[Config.DEFAULT_INGRESS_ID]

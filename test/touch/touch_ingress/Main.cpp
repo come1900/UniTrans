@@ -31,10 +31,16 @@
 
 // 默认参数
 #define DEFAULT_PORT    54321
+#define DEFAULT_WSS_PORT 54443
 
 // arglist 参数定义（支持长短参数名）
 static const char *arg_port = NULL;           // -p, --port
 static const char *arg_bind_addr = NULL;      // -b, --bind
+static int arg_wss_enable = 0;                // -w, --wss-enable
+static const char *arg_wss_port = NULL;       // --wss-port
+static const char *arg_tls_cert = NULL;       // --tls-cert
+static const char *arg_tls_key = NULL;        // --tls-key
+static const char *arg_tls_ca = NULL;         // --tls-ca
 static int arg_help = 0;                      // -h, --help
 
 // 位置参数列表（arglist 规范）
@@ -43,9 +49,14 @@ static int arglist_count = 0;
 
 // 长选项定义
 static struct option long_options[] = {
-    {"port",      required_argument, 0, 'p'},
-    {"bind",      required_argument, 0, 'b'},
-    {"help",      no_argument,       0, 'h'},
+    {"port",       required_argument, 0, 'p'},
+    {"bind",       required_argument, 0, 'b'},
+    {"wss-enable", no_argument,       0, 'w'},
+    {"wss-port",   required_argument, 0, 'W'},
+    {"tls-cert",   required_argument, 0, 'c'},
+    {"tls-key",    required_argument, 0, 'k'},
+    {"tls-ca",     required_argument, 0, 'a'},
+    {"help",       no_argument,       0, 'h'},
     {0, 0, 0, 0}
 };
 
@@ -77,9 +88,14 @@ void print_usage(const char *prog)
     printf("WebSocket server for device registration.\n");
     printf("\n");
     printf("Options:\n");
-    printf("  -p, --port <port>       Server port (default: %d)\n", DEFAULT_PORT);
-    printf("  -b, --bind <address>    Bind address (default: 0.0.0.0)\n");
-    printf("  -h, --help              Show this help message\n");
+    printf("  -p, --port <port>           Server port (default: %d)\n", DEFAULT_PORT);
+    printf("  -b, --bind <address>        Bind address (default: 0.0.0.0)\n");
+    printf("  -w, --wss-enable            Enable TLS wss instance (default: off)\n");
+    printf("  -W, --wss-port <port>       WSS port (default: %d)\n", DEFAULT_WSS_PORT);
+    printf("  -c, --tls-cert <file>       TLS certificate chain (empty -> builtin CA)\n");
+    printf("  -k, --tls-key <file>        TLS private key (empty -> builtin CA)\n");
+    printf("  -a, --tls-ca <file>         Optional client CA for mTLS\n");
+    printf("  -h, --help                  Show this help message\n");
     printf("\n");
     printf("Positional arguments (arglist, in order):\n");
     printf("  <port> <bind_address>\n");
@@ -96,13 +112,28 @@ int main(int argc, char *argv[])
     int option_index = 0;
     
     // 使用 getopt_long 解析命令行参数
-    while ((opt = getopt_long(argc, argv, "p:b:h", long_options, &option_index)) != -1) {
+    while ((opt = getopt_long(argc, argv, "p:b:wW:c:k:a:h", long_options, &option_index)) != -1) {
         switch (opt) {
             case 'p':
                 arg_port = optarg;
                 break;
             case 'b':
                 arg_bind_addr = optarg;
+                break;
+            case 'w':
+                arg_wss_enable = 1;
+                break;
+            case 'W':
+                arg_wss_port = optarg;
+                break;
+            case 'c':
+                arg_tls_cert = optarg;
+                break;
+            case 'k':
+                arg_tls_key = optarg;
+                break;
+            case 'a':
+                arg_tls_ca = optarg;
                 break;
             case 'h':
                 arg_help = 1;
@@ -141,7 +172,20 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    printf("touch_ingress: Starting server on port %d, bind: %s\n", port, bind_addr);
+    // wss 实例配置
+    unsigned short wss_port = arg_wss_port ? (unsigned short)atoi(arg_wss_port) : DEFAULT_WSS_PORT;
+    if (arg_wss_enable && (wss_port == 0 || wss_port > 65535)) {
+        fprintf(stderr, "Invalid wss port: %d (must be 1-65535)\n", wss_port);
+        return 1;
+    }
+    bool wss_enable = arg_wss_enable != 0;
+
+    printf("touch_ingress: Starting server on port %d, bind: %s%s\n", port, bind_addr,
+           wss_enable ? ", wss enabled" : "");
+    if (wss_enable) {
+        printf("touch_ingress: WSS on port %d, cert=%s, key=%s\n",
+               wss_port, arg_tls_cert ? arg_tls_cert : "(builtin CA)", arg_tls_key ? arg_tls_key : "(builtin CA)");
+    }
 
 
     // 初始化 ezThread
@@ -155,8 +199,12 @@ int main(int argc, char *argv[])
     CFunRegisterSvr register_svr;
     register_svr.SetRegisterCallback(on_device_register, NULL);
 
-    // 启动
-    register_svr.Start(port);
+    // 启动（明文 + 可选 wss）
+    register_svr.Start(port, "come.1", "/come",
+                       wss_enable, wss_port,
+                       arg_tls_cert ? arg_tls_cert : "",
+                       arg_tls_key ? arg_tls_key : "",
+                       arg_tls_ca ? arg_tls_ca : "");
 
     // 主循环：等待中断
     printf("touch_ingress running, press Ctrl+C to exit...\n");

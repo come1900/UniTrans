@@ -23,6 +23,9 @@
 #include "EZThread.h"
 #include "EZSignals.h"
 #include "ez_wsclient-native.h"
+#ifdef _FUNC_TouchEdge_EnableTls
+#include "ez_wss-client-native.h"
+#endif
 
 #define g_DevWsRegisterCli (*CDevWsRegisterCli::instance())
 
@@ -48,9 +51,14 @@ public:
     typedef DevWsRegisterCliSignal_t::SigProc DevWsRegisterCliSignalProc_t;
     
     // 启动/停止
+    // tls_enable: 0=明文 ws（ez_ws_client_*），1=TLS wss（ez_wss_client_*，默认）
+    // tls_verify_peer: wss 时是否校验服务端证书（1=默认，内置 CA 互认；0=仅加密不认证）
+    // tls_ca_path: wss 校验服务端所用 CA，空=内置/系统 CA
     bool Start(const char *server_addr, unsigned short port,
                const char *url_path = "/come", const char *protocol = "come.1",
-               int reconnect_max_retries = 0);
+               int reconnect_max_retries = 0,
+               int tls_enable = 1, int tls_verify_peer = 1,
+               const char *tls_ca_path = NULL);
     bool Stop();
     
     // 注册信号槽（统一接口）
@@ -75,7 +83,15 @@ private:
     CDevWsRegisterCli(const CDevWsRegisterCli&);
     CDevWsRegisterCli& operator=(const CDevWsRegisterCli&);
     
-    struct ez_ws_client_handle *m_ws_handle;
+    struct ez_ws_client_handle *m_ws_handle;    // 明文 ws 句柄（tls_enable=0 时使用）
+#ifdef _FUNC_TouchEdge_EnableTls
+    struct ez_wss_client_handle *m_wss_handle;  // TLS wss 句柄（tls_enable=1 时使用）
+#endif
+
+    // TLS 配置（Start 时按 tls_enable 选择明文或 wss）
+    bool m_tls_enable;
+    bool m_tls_verify_peer;
+    std::string m_tls_ca_path;
     
     // 统一信号槽
     DevWsRegisterCliSignal_t m_SigNotify;

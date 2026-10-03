@@ -25,6 +25,8 @@ CFLAGS += -Wall -g -O2 -MD
 #CFLAGS += -static
 CFLAGS += -D_DEBUG #debugme
 CFLAGS += -D_USE_EZLOG_FILENAME
+# wss TLS 编译开关：注释/删除此行可完全排除 wss，无需链接 OpenSSL
+CFLAGS += -D_FUNC_TouchEdge_EnableTls
 
 ##############################################################################
 # 代码文件位置 - 复用正式代码，但在本地编译
@@ -42,6 +44,7 @@ EZLIBS_BASEDIR_LIBS=$(HOME)/libs
 # 正式代码的对象文件在本地构建
 OBJS_DEVWS = $(TOUCH_INGRESS_LOCAL_OBJDIR)/DevWsRegisterSvr.o
 OBJS_FUNCREG = $(TOUCH_INGRESS_LOCAL_OBJDIR)/FunRegisterSvr.o
+OBJS_WSTRANSPORT = $(TOUCH_INGRESS_LOCAL_OBJDIR)/WsTransport.o
 OBJS_MAIN = ./Main.o
 
 CFLAGS += -I${EZLIBS_BASEDIR_LIBS}/include/ezThread
@@ -60,12 +63,23 @@ LIBS += -L${EZLIBS_BASEDIR_LIBS}/lib -lcome1-$(PLATFORM)
 CFLAGS += -I$(TOUCH_INGRESS_BASEDIR_SRC)
 CFLAGS += -I./
 
+# OpenSSL 静态库（wss TLS 支持，见 spec-design-tls-websocket.md「编译与链接」）
+# 仅当定义了 -D_FUNC_TouchEdge_EnableTls 才链接；否则完全排除 wss
+ifneq ($(filter -D_FUNC_TouchEdge_EnableTls,$(CFLAGS)),)
+OPENSSL_INSTALL_PREFIX = $(HOME)/libs/openssl-linux
+CFLAGS += -I$(OPENSSL_INSTALL_PREFIX)/include -I$(HOME)/libs/zlib-linux/include
+LIBS += $(OPENSSL_INSTALL_PREFIX)/lib64/libssl.a \
+        $(OPENSSL_INSTALL_PREFIX)/lib64/libcrypto.a \
+        $(HOME)/libs/zlib-linux/lib/libz.a
+endif
+
 LIBS += -lpthread
 LIBS += -lrt
+LIBS += -ldl
 LIBS += -lm
 
 # Ingress 程序
-OBJS_TOUCH_INGRESS = $(OBJS_DEVWS) $(OBJS_FUNCREG) $(OBJS_MAIN)
+OBJS_TOUCH_INGRESS = $(OBJS_DEVWS) $(OBJS_FUNCREG) $(OBJS_WSTRANSPORT) $(OBJS_MAIN)
 DIST_TOUCH_INGRESS = touch_ingress-$(PLATFORM)
 
 DIST = $(DIST_TOUCH_INGRESS)
@@ -80,6 +94,9 @@ $(TOUCH_INGRESS_LOCAL_OBJDIR)/DevWsRegisterSvr.o: $(TOUCH_INGRESS_BASEDIR_SRC)/D
 	$(CPP) -c $(CFLAGS) $< -o $@
 
 $(TOUCH_INGRESS_LOCAL_OBJDIR)/FunRegisterSvr.o: $(TOUCH_INGRESS_BASEDIR_SRC)/FunRegisterSvr.cpp $(TOUCH_INGRESS_BASEDIR_SRC)/FunRegisterSvr.h
+	$(CPP) -c $(CFLAGS) $< -o $@
+
+$(TOUCH_INGRESS_LOCAL_OBJDIR)/WsTransport.o: $(TOUCH_INGRESS_BASEDIR_SRC)/WsTransport.cpp $(TOUCH_INGRESS_BASEDIR_SRC)/WsTransport.h
 	$(CPP) -c $(CFLAGS) $< -o $@
 
 # 编译 Main.cpp

@@ -39,6 +39,12 @@ typedef struct __AgentTouchEdgeCfg
     std::string EdgeType;
     int iConnTimeOut;
 
+    // wss/TLS 配置（wss 翻切）
+    int iWssEnable;        // 0=明文 ws，1=TLS wss
+    unsigned short iWssPort;   // wss 端口（iWssEnable=1 时使用）
+    int iTlsVerifyPeer;    // wss 是否校验服务端证书
+    std::string strTlsCaPath; // wss 校验 CA
+
     __AgentTouchEdgeCfg()
     {
         IngressHost = "127.0.0.1";
@@ -47,6 +53,10 @@ typedef struct __AgentTouchEdgeCfg
         EdgeKey = "key001";
         EdgeType = "touch";
         iConnTimeOut = 5;
+        iWssEnable = 1;
+        iWssPort = 54443;
+        iTlsVerifyPeer = 1;
+        strTlsCaPath = "";
     }
 }
 AgentTouchEdgeCfg_T;
