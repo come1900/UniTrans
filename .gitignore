@@ -28,3 +28,4 @@ __pycache__/
 # ===== Touch 测试可执行文件（编译产物） =====
 test/touch/touch_ingress/touch_ingress-linux
 test/touch/touch_edge/touch_edge-linux
+build/touchIngress-linux
